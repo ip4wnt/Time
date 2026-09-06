@@ -20,7 +20,9 @@
         <button class="nav-btn" id="month-prev" aria-label="Предыдущий месяц">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
-        <h1 class="month-title" id="month-title">сен</h1>
+        <h1 class="month-title">
+          <span id="month-title">сен</span> <span id="month-year">26</span>
+        </h1>
         <button class="nav-btn" id="month-next" aria-label="Следующий месяц">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
@@ -31,6 +33,11 @@
       </div>
 
       <div class="month-grid" id="month-grid" role="grid" aria-label="Календарь месяца"></div>
+
+      <div class="mode-toggle" id="mode-toggle">
+        <button class="mode-btn" id="mode-plan-btn" data-mode="plan">план</button>
+        <button class="mode-btn is-active" id="mode-fact-btn" data-mode="fact">факт</button>
+      </div>
 
       <div class="month-notes" id="month-notes"></div>
 
@@ -76,12 +83,20 @@
       </div>
     </div>
 
+    <div class="selection-bar" id="plan-selection-bar" hidden>
+      <span id="plan-selection-count">Выбрано дней: 0</span>
+      <div class="selection-bar-actions">
+        <button class="btn btn-ghost" id="plan-selection-cancel">Отмена</button>
+        <button class="btn btn-primary" id="plan-selection-confirm">Добавить план</button>
+      </div>
+    </div>
+
     <!-- ===================== COLOR / NOTE SHEET ===================== -->
     <div class="sheet-overlay" id="sheet-overlay">
       <div class="sheet">
         <div class="sheet-handle"></div>
         <div class="sheet-title" id="sheet-title">
-          Час
+          <span id="sheet-title-text">Час</span>
           <span class="sub" id="sheet-subtitle"></span>
         </div>
 

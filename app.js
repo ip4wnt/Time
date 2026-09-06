@@ -139,7 +139,25 @@ function makeEmptyYear(year) {
   return {
     year,
     days: Array.from({ length: n }, (_, i) => makeEmptyDay(i + 1)),
+    plan: {
+      days: Array.from({ length: n }, () => ({ color: null, noteId: null })),
+      notes: {},
+      nextNoteId: 1,
+    },
   };
+}
+
+function ensurePlanShape(rec) {
+  const n = daysInYear(rec.year);
+  if (!rec.plan) {
+    rec.plan = { days: Array.from({ length: n }, () => ({ color: null, noteId: null })), notes: {}, nextNoteId: 1 };
+  }
+  if (!Array.isArray(rec.plan.days)) rec.plan.days = [];
+  if (rec.plan.days.length < n) {
+    for (let i = rec.plan.days.length; i < n; i++) rec.plan.days.push({ color: null, noteId: null });
+  }
+  if (!rec.plan.notes) rec.plan.notes = {};
+  if (!rec.plan.nextNoteId) rec.plan.nextNoteId = 1;
 }
 
 /* ---------- App state ---------- */
@@ -151,8 +169,9 @@ const state = {
   monthCursorYear: new Date().getFullYear(),
   currentDOY: dayOfYear(new Date()), // day shown in day view
   currentDayYear: new Date().getFullYear(),
-  selection: [], // array of hour indices currently selected in sheet
-  multiSelectMode: false, // true once long-press activates multi-select
+  selection: [], // array of hour indices currently selected (day view)
+  monthMode: 'fact', // 'fact' | 'plan'
+  planSelection: [], // array of doy currently selected in plan mode
 };
 
 async function ensureYearLoaded(year) {
@@ -169,6 +188,7 @@ async function ensureYearLoaded(year) {
       rec.days.push(makeEmptyDay(i + 1));
     }
   }
+  ensurePlanShape(rec);
   state.yearData = rec;
   return rec;
 }
@@ -298,50 +318,14 @@ function escapeHTML(str) {
   return div.innerHTML;
 }
 
-/* ---------- Hour cell interaction (tap / long-press) ---------- */
-
-let longPressTimer = null;
-let longPressFired = false;
-const LONG_PRESS_MS = 420;
+/* ---------- Hour cell interaction (tap toggles selection) ---------- */
 
 function attachHourCellEvents(cell, hourIndex) {
-  const start = (e) => {
-    longPressFired = false;
-    longPressTimer = setTimeout(() => {
-      longPressFired = true;
-      state.multiSelectMode = true;
-      toggleSelection(hourIndex);
-      if (navigator.vibrate) navigator.vibrate(12);
-      renderDayGrid();
-      updateSelectionBar();
-    }, LONG_PRESS_MS);
-  };
-  const cancel = () => {
-    clearTimeout(longPressTimer);
-  };
-  const end = (e) => {
-    clearTimeout(longPressTimer);
-    if (longPressFired) return;
-    // Simple tap
-    if (state.multiSelectMode) {
-      // already in multi-select mode -> tapping toggles membership
-      toggleSelection(hourIndex);
-      renderDayGrid();
-      updateSelectionBar();
-    } else {
-      state.selection = [hourIndex];
-      openHourSheet();
-    }
-  };
-
-  cell.addEventListener('touchstart', start, { passive: true });
-  cell.addEventListener('touchend', end);
-  cell.addEventListener('touchmove', cancel);
-  cell.addEventListener('touchcancel', cancel);
-
-  cell.addEventListener('mousedown', start);
-  cell.addEventListener('mouseup', end);
-  cell.addEventListener('mouseleave', cancel);
+  cell.addEventListener('click', () => {
+    toggleSelection(hourIndex);
+    renderDayGrid();
+    updateSelectionBar();
+  });
 }
 
 function toggleSelection(hourIndex) {
@@ -356,7 +340,7 @@ function toggleSelection(hourIndex) {
 function updateSelectionBar() {
   const bar = $('#selection-bar');
   const hint = $('#day-hint');
-  if (state.multiSelectMode && state.selection.length > 0) {
+  if (state.selection.length > 0) {
     bar.hidden = false;
     if (hint) hint.style.visibility = 'hidden';
     $('#selection-count').textContent = `Выбрано часов: ${state.selection.length}`;
@@ -367,7 +351,6 @@ function updateSelectionBar() {
 }
 
 function exitMultiSelect() {
-  state.multiSelectMode = false;
   state.selection = [];
   updateSelectionBar();
   renderDayGrid();
@@ -426,10 +409,15 @@ function updatePaletteActiveState() {
   });
 }
 
+let sheetTarget = 'hour'; // 'hour' | 'plan'
+const sheetTitleText = $('#sheet-title-text');
+
 function openHourSheet() {
+  sheetTarget = 'hour';
   const day = getDay(state.currentDayYear, state.currentDOY);
   const hrs = [...state.selection].sort((a, b) => a - b);
 
+  sheetTitleText.textContent = 'Час';
   sheetSubtitle.textContent =
     hrs.length === 1 ? `${hrs[0]}:00 – ${hrs[0] + 1}:00` : `${formatHourRangeLabel(hrs)} ч`;
 
@@ -452,13 +440,22 @@ function openHourSheet() {
 
 function closeSheet() {
   sheetOverlay.classList.remove('is-open');
-  state.selection = [];
-  state.multiSelectMode = false;
-  updateSelectionBar();
-  renderDayGrid();
+  if (sheetTarget === 'plan') {
+    state.planSelection = [];
+    updatePlanSelectionBar();
+    renderMonthView();
+  } else {
+    state.selection = [];
+    updateSelectionBar();
+    renderDayGrid();
+  }
 }
 
 async function saveSheet() {
+  if (sheetTarget === 'plan') {
+    await savePlanSheet();
+    return;
+  }
   const day = getDay(state.currentDayYear, state.currentDOY);
   const hrs = [...state.selection].sort((a, b) => a - b);
   const text = noteField.value.trim();
@@ -506,8 +503,13 @@ sheetOverlay.addEventListener('click', (e) => {
    ========================================================================= */
 
 const monthTitle = $('#month-title');
+const monthYearEl = $('#month-year');
 const monthGrid = $('#month-grid');
 const monthNotesEl = $('#month-notes');
+const modePlanBtn = $('#mode-plan-btn');
+const modeFactBtn = $('#mode-fact-btn');
+const planSelectionBar = $('#plan-selection-bar');
+const planSelectionCount = $('#plan-selection-count');
 
 function computeDayColor(day) {
   // Count colored hours per color, ignoring sleep, ignoring empty
@@ -569,9 +571,10 @@ function findLongRunsForMonth(day) {
 async function renderMonthView() {
   const year = state.monthCursorYear;
   const month = state.monthCursor;
-  await ensureYearLoaded(year);
+  const rec = await ensureYearLoaded(year);
 
   monthTitle.textContent = MONTH_NAMES[month];
+  monthYearEl.textContent = String(year % 100).padStart(2, '0');
 
   const firstOfMonth = new Date(year, month, 1);
   // JS getDay(): 0=Sun..6=Sat. We want Monday-first index: 0=Mon..6=Sun
@@ -595,27 +598,47 @@ async function renderMonthView() {
   const today = new Date();
   const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
   const monthNoteBlocks = [];
+  const isPlan = state.monthMode === 'plan';
 
   for (let d = 1; d <= totalDays; d++) {
     const dateObj = new Date(year, month, d);
     const doy = dayOfYear(dateObj);
     const day = getDay(year, doy) || makeEmptyDay(doy);
 
-    const colorId = computeDayColor(day);
     const cell = document.createElement('button');
     cell.type = 'button';
-    cell.className = 'month-cell ' + (colorId ? cellShadeClass(colorId) : 'is-empty');
-    if (colorId) cell.style.background = COLOR_MAP[colorId].hex;
-    if (isCurrentMonth && d === today.getDate()) cell.classList.add('is-today');
     cell.textContent = d;
     cell.dataset.doy = String(doy);
-    cell.addEventListener('click', () => openDayFromMonth(year, doy));
-    monthGrid.appendChild(cell);
 
-    const texts = findLongRunsForMonth(day);
-    if (texts.length) {
-      monthNoteBlocks.push({ day: d, texts });
+    if (isPlan) {
+      const planEntry = rec.plan.days[doy - 1] || { color: null, noteId: null };
+      const colorId = planEntry.color;
+      cell.className = 'month-cell ' + (colorId ? cellShadeClass(colorId) : 'is-empty');
+      if (colorId) cell.style.background = COLOR_MAP[colorId].hex;
+      if (isCurrentMonth && d === today.getDate()) cell.classList.add('is-today');
+      if (state.planSelection.includes(doy)) cell.classList.add('is-selected');
+      cell.addEventListener('click', () => togglePlanSelection(doy));
+
+      if (colorId && planEntry.noteId != null) {
+        const note = rec.plan.notes[planEntry.noteId];
+        if (note && note.text && note.text.trim()) {
+          monthNoteBlocks.push({ day: d, texts: [note.text.trim()] });
+        }
+      }
+    } else {
+      const colorId = computeDayColor(day);
+      cell.className = 'month-cell ' + (colorId ? cellShadeClass(colorId) : 'is-empty');
+      if (colorId) cell.style.background = COLOR_MAP[colorId].hex;
+      if (isCurrentMonth && d === today.getDate()) cell.classList.add('is-today');
+      cell.addEventListener('click', () => openDayFromMonth(year, doy));
+
+      const texts = findLongRunsForMonth(day);
+      if (texts.length) {
+        monthNoteBlocks.push({ day: d, texts });
+      }
     }
+
+    monthGrid.appendChild(cell);
   }
 
   // Trailing days from next month to fill final row
@@ -629,13 +652,16 @@ async function renderMonthView() {
     monthGrid.appendChild(cell);
   }
 
-  renderMonthNotes(monthNoteBlocks);
+  renderMonthNotes(monthNoteBlocks, isPlan);
+  updatePlanSelectionBar();
 }
 
-function renderMonthNotes(blocks) {
+function renderMonthNotes(blocks, isPlan) {
   if (!blocks.length) {
     monthNotesEl.classList.add('empty');
-    monthNotesEl.textContent = 'Нет продолжительных занятий (>3ч подряд) в этом месяце.';
+    monthNotesEl.textContent = isPlan
+      ? 'В этом месяце нет запланированных дней.'
+      : 'Нет продолжительных занятий (>3ч подряд) в этом месяце.';
     return;
   }
   monthNotesEl.classList.remove('empty');
@@ -652,6 +678,126 @@ function openDayFromMonth(year, doy) {
   state.currentDOY = doy;
   showScreen('day');
 }
+
+/* ---------- Plan mode: day selection ---------- */
+
+function togglePlanSelection(doy) {
+  const idx = state.planSelection.indexOf(doy);
+  if (idx >= 0) {
+    state.planSelection.splice(idx, 1);
+  } else {
+    state.planSelection.push(doy);
+  }
+  renderMonthView();
+}
+
+function updatePlanSelectionBar() {
+  if (state.monthMode === 'plan' && state.planSelection.length > 0) {
+    planSelectionBar.hidden = false;
+    planSelectionCount.textContent = `Выбрано дней: ${state.planSelection.length}`;
+  } else {
+    planSelectionBar.hidden = true;
+  }
+}
+
+function exitPlanSelection() {
+  state.planSelection = [];
+  updatePlanSelectionBar();
+  renderMonthView();
+}
+
+$('#plan-selection-cancel').addEventListener('click', exitPlanSelection);
+$('#plan-selection-confirm').addEventListener('click', () => {
+  if (state.planSelection.length === 0) return;
+  openPlanSheet();
+});
+
+async function openPlanSheet() {
+  sheetTarget = 'plan';
+  const rec = await ensureYearLoaded(state.monthCursorYear);
+  const doys = [...state.planSelection].sort((a, b) => a - b);
+
+  sheetTitleText.textContent = 'План';
+  sheetSubtitle.textContent =
+    doys.length === 1
+      ? formatPlanDayLabel(doys[0])
+      : `${doys.length} дней`;
+
+  const colorsInSel = new Set(doys.map((doy) => rec.plan.days[doy - 1].color));
+  pendingColorId = colorsInSel.size === 1 ? [...colorsInSel][0] : null;
+  updatePaletteActiveState();
+
+  const noteIds = new Set(doys.map((doy) => rec.plan.days[doy - 1].noteId));
+  if (noteIds.size === 1 && [...noteIds][0] != null) {
+    const note = rec.plan.notes[[...noteIds][0]];
+    noteField.value = note ? note.text : '';
+  } else {
+    noteField.value = '';
+  }
+
+  sheetOverlay.classList.add('is-open');
+}
+
+function formatPlanDayLabel(doy) {
+  const year = state.monthCursorYear;
+  const dateObj = dateFromDOY(year, doy);
+  return `${dateObj.getDate()} ${MONTH_NAMES[dateObj.getMonth()]}`;
+}
+
+async function savePlanSheet() {
+  const rec = await ensureYearLoaded(state.monthCursorYear);
+  const doys = [...state.planSelection].sort((a, b) => a - b);
+  const text = noteField.value.trim();
+
+  // Remove these days from any note groups they previously belonged to
+  doys.forEach((doy) => {
+    const entry = rec.plan.days[doy - 1];
+    const oldNoteId = entry.noteId;
+    if (oldNoteId != null && rec.plan.notes[oldNoteId]) {
+      rec.plan.notes[oldNoteId].days = rec.plan.notes[oldNoteId].days.filter((x) => x !== doy);
+      if (rec.plan.notes[oldNoteId].days.length === 0) delete rec.plan.notes[oldNoteId];
+    }
+  });
+
+  if (pendingColorId === null) {
+    doys.forEach((doy) => {
+      rec.plan.days[doy - 1].color = null;
+      rec.plan.days[doy - 1].noteId = null;
+    });
+  } else {
+    let noteId = null;
+    if (text) {
+      noteId = rec.plan.nextNoteId++;
+      rec.plan.notes[noteId] = { text, days: [...doys] };
+    }
+    doys.forEach((doy) => {
+      rec.plan.days[doy - 1].color = pendingColorId;
+      rec.plan.days[doy - 1].noteId = noteId;
+    });
+  }
+
+  await saveCurrentYear();
+  closeSheet();
+  showToast('Сохранено');
+}
+
+modePlanBtn.addEventListener('click', () => {
+  if (state.monthMode === 'plan') return;
+  state.monthMode = 'plan';
+  state.planSelection = [];
+  modePlanBtn.classList.add('is-active');
+  modeFactBtn.classList.remove('is-active');
+  renderMonthView();
+});
+
+modeFactBtn.addEventListener('click', () => {
+  if (state.monthMode === 'fact') return;
+  state.monthMode = 'fact';
+  state.planSelection = [];
+  modeFactBtn.classList.add('is-active');
+  modePlanBtn.classList.remove('is-active');
+  renderMonthView();
+});
 
 $('#month-prev').addEventListener('click', () => {
   state.monthCursor--;
@@ -680,7 +826,6 @@ function showScreen(name) {
     screenMonth.hidden = true;
     screenDay.hidden = false;
     state.selection = [];
-    state.multiSelectMode = false;
     updateSelectionBar();
     renderDayHeader();
     renderDayGrid();
@@ -739,7 +884,7 @@ async function shiftDay(delta) {
       const dx = e.changedTouches[0].clientX - touchStartX;
       const dy = e.changedTouches[0].clientY - touchStartY;
       const sheetOpen = sheetOverlay.classList.contains('is-open');
-      if (dx > 80 && Math.abs(dy) < 60 && !state.multiSelectMode && !sheetOpen) {
+      if (dx > 80 && Math.abs(dy) < 60 && state.selection.length === 0 && !sheetOpen) {
         showScreen('month');
       }
       touchStartX = null;

@@ -344,8 +344,50 @@ body {
   box-shadow: 0 0 0 2px var(--color-primary) inset;
 }
 
+.month-cell.is-selected {
+  box-shadow: 0 0 0 2px var(--color-text) inset;
+}
+
+.month-cell.is-selected.is-today {
+  box-shadow: 0 0 0 2px var(--color-text) inset, 0 0 0 4px var(--color-primary) inset;
+}
+
 .month-cell:active {
   transform: scale(0.94);
+}
+
+/* ===== Plan/Fact mode toggle ===== */
+
+.mode-toggle {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-lg);
+  padding: 4px;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-transform: lowercase;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  text-align: center;
+}
+
+.mode-btn.is-active {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.mode-btn:active {
+  transform: scale(0.97);
 }
 
 /* ===== Month notes summary ===== */
