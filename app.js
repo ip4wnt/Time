@@ -14,8 +14,7 @@ const STORE = 'years';
 
 const COLORS = [
   { id: 'green', hex: '#7bd694', label: 'Зелёный', dark: false },
-  { id: 'sleep', hex: '#363636', label: 'Сон', dark: true },
-  { id: 'darkgray', hex: '#4a4a4a', label: 'Тёмно-серый', dark: true },
+  { id: 'sleep', hex: '#1a1a1a', label: 'Сон', dark: true },
   { id: 'white', hex: '#f5f5f0', label: 'Белый', dark: false },
   { id: 'blue', hex: '#5b7fc4', label: 'Синий', dark: true },
   { id: 'purple', hex: '#3a1361', label: 'Фиолетовый', dark: true },
@@ -618,13 +617,6 @@ async function renderMonthView() {
       if (isCurrentMonth && d === today.getDate()) cell.classList.add('is-today');
       if (state.planSelection.includes(doy)) cell.classList.add('is-selected');
       cell.addEventListener('click', () => togglePlanSelection(doy));
-
-      if (colorId && planEntry.noteId != null) {
-        const note = rec.plan.notes[planEntry.noteId];
-        if (note && note.text && note.text.trim()) {
-          monthNoteBlocks.push({ day: d, texts: [note.text.trim()] });
-        }
-      }
     } else {
       const colorId = computeDayColor(day);
       cell.className = 'month-cell ' + (colorId ? cellShadeClass(colorId) : 'is-empty');
@@ -634,7 +626,7 @@ async function renderMonthView() {
 
       const texts = findLongRunsForMonth(day);
       if (texts.length) {
-        monthNoteBlocks.push({ day: d, texts });
+        monthNoteBlocks.push({ label: String(d), texts });
       }
     }
 
@@ -652,8 +644,51 @@ async function renderMonthView() {
     monthGrid.appendChild(cell);
   }
 
-  renderMonthNotes(monthNoteBlocks, isPlan);
+  const finalBlocks = isPlan ? computePlanNoteBlocks(rec, year, month, totalDays) : monthNoteBlocks;
+  renderMonthNotes(finalBlocks, isPlan);
   updatePlanSelectionBar();
+}
+
+function formatDayRangeLabel(sortedDaysOfMonth) {
+  // Group consecutive days for display, e.g. "13" or "18-21"
+  const groups = [];
+  let start = sortedDaysOfMonth[0];
+  let prev = sortedDaysOfMonth[0];
+  for (let i = 1; i <= sortedDaysOfMonth.length; i++) {
+    const d = sortedDaysOfMonth[i];
+    if (d === prev + 1) {
+      prev = d;
+      continue;
+    }
+    groups.push([start, prev]);
+    start = d;
+    prev = d;
+  }
+  return groups.map(([a, b]) => (a === b ? `${a}` : `${a}–${b}`)).join(', ');
+}
+
+function computePlanNoteBlocks(rec, year, month, totalDays) {
+  // Determine the doy range covered by this displayed month
+  const firstDOY = dayOfYear(new Date(year, month, 1));
+  const lastDOY = dayOfYear(new Date(year, month, totalDays));
+
+  const blocks = [];
+  Object.entries(rec.plan.notes).forEach(([noteId, note]) => {
+    if (!note || !note.text || !note.text.trim()) return;
+    const daysInThisMonth = (note.days || [])
+      .filter((doy) => doy >= firstDOY && doy <= lastDOY)
+      .map((doy) => dateFromDOY(year, doy).getDate())
+      .sort((a, b) => a - b);
+    if (!daysInThisMonth.length) return;
+    blocks.push({
+      label: formatDayRangeLabel(daysInThisMonth),
+      texts: [note.text.trim()],
+      firstDay: daysInThisMonth[0],
+    });
+  });
+
+  blocks.sort((a, b) => a.firstDay - b.firstDay);
+  return blocks;
 }
 
 function renderMonthNotes(blocks, isPlan) {
@@ -668,7 +703,7 @@ function renderMonthNotes(blocks, isPlan) {
   monthNotesEl.innerHTML = blocks
     .map(
       (b) =>
-        `<div class="day-block"><span class="day-num">${b.day}</span>${b.texts.map(escapeHTML).join(' · ')}</div>`
+        `<div class="day-block"><span class="day-num">${b.label}</span>${b.texts.map(escapeHTML).join(' · ')}</div>`
     )
     .join('');
 }

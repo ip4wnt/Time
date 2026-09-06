@@ -50,9 +50,8 @@
   --font-body: 'Manrope', 'Segoe UI', sans-serif;
 
   /* --- The 9 tracking colors (from mockups) --- */
-  --c-sleep: #363636;      /* сон — игнорируется при оценке дня */
+  --c-sleep: #1a1a1a;      /* сон — игнорируется при оценке дня */
   --c-green: #7bd694;
-  --c-darkgray: #4a4a4a;
   --c-white: #f5f5f0;
   --c-blue: #5b7fc4;
   --c-purple: #3a1361;
