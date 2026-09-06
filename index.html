@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a1a1a" />
+  <title>Трекер времени</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./base.css" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- ===================== MONTH VIEW ===================== -->
+    <section class="screen" id="screen-month">
+      <div class="month-header">
+        <button class="nav-btn" id="month-prev" aria-label="Предыдущий месяц">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <h1 class="month-title" id="month-title">сен</h1>
+        <button class="nav-btn" id="month-next" aria-label="Следующий месяц">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+
+      <div class="weekday-row">
+        <span>П</span><span>В</span><span>С</span><span>Ч</span><span>П</span><span>С</span><span>В</span>
+      </div>
+
+      <div class="month-grid" id="month-grid" role="grid" aria-label="Календарь месяца"></div>
+
+      <div class="month-notes" id="month-notes"></div>
+
+      <div class="month-actions">
+        <button class="icon-btn" id="btn-export" aria-label="Экспорт данных в файл">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+        </button>
+        <button class="icon-btn" id="btn-import" aria-label="Импорт данных из файла">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M12 16l-4-4M12 16l4-4"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+        </button>
+        <input type="file" id="import-input" class="visually-hidden-input" accept=".json,application/json" />
+      </div>
+    </section>
+
+    <!-- ===================== DAY VIEW ===================== -->
+    <section class="screen" id="screen-day" hidden>
+      <div class="day-header">
+        <button class="nav-btn" id="day-prev" aria-label="Предыдущий день">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div class="day-title" id="day-title-btn">
+          <span class="dow" id="day-dow">ВС</span>
+          <span class="num" id="day-num">14</span>
+          <span class="mon" id="day-mon">сен</span>
+        </div>
+        <button class="nav-btn" id="day-next" aria-label="Следующий день">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+
+      <div class="hour-grid" id="hour-grid" role="grid" aria-label="Часы дня"></div>
+
+      <div class="day-notes" id="day-notes"></div>
+
+      <div class="day-hint" id="day-hint">Свайп вправо — вернуться к месяцу</div>
+    </section>
+
+    <div class="selection-bar" id="selection-bar" hidden>
+      <span id="selection-count">Выбрано часов: 0</span>
+      <div class="selection-bar-actions">
+        <button class="btn btn-ghost" id="selection-cancel">Отмена</button>
+        <button class="btn btn-primary" id="selection-confirm">Задать цвет</button>
+      </div>
+    </div>
+
+    <!-- ===================== COLOR / NOTE SHEET ===================== -->
+    <div class="sheet-overlay" id="sheet-overlay">
+      <div class="sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-title" id="sheet-title">
+          Час
+          <span class="sub" id="sheet-subtitle"></span>
+        </div>
+
+        <div class="palette-grid" id="palette-grid"></div>
+
+        <textarea
+          class="note-field"
+          id="note-field"
+          placeholder="Что происходило в это время?"
+          maxlength="600"
+        ></textarea>
+
+        <div class="sheet-actions">
+          <button class="btn btn-ghost" id="sheet-cancel">Отмена</button>
+          <button class="btn btn-primary" id="sheet-save">Сохранить</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
