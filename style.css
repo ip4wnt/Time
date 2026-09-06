@@ -196,7 +196,7 @@ body {
   color: rgba(0, 0, 0, 0.5);
 }
 .hour-cell.is-dark .hour-label {
-  color: rgba(255, 255, 255, 0.75);
+  color: #6e6c68;
 }
 .hour-cell.is-empty .hour-label {
   color: var(--color-text-faint);
