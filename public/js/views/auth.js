@@ -6,7 +6,7 @@ import { esc } from '../state.js';
 export function renderAuth(root) {
   return new Promise((resolve) => {
     const el = h(`<div class="auth"><div class="auth-in">
-      <img class="auth-logo" src="/img/logo.png" alt="ХРОНУМ">
+      <img class="auth-logo" src="img/logo.png" alt="ХРОНУМ">
       <div class="auth-card"></div>
     </div></div>`);
     root.appendChild(el);

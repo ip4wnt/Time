@@ -36,7 +36,7 @@ body {
 body::before {
   content: '';
   position: fixed; inset: 0; z-index: 0; pointer-events: none;
-  background: url('/img/halftone.jpg') center top / 60.3rem auto repeat;
+  background: url('../img/halftone.jpg') center top / 60.3rem auto repeat;
   opacity: .55;
 }
 .app { position: relative; z-index: 1; max-width: 60.3rem; margin: 0 auto; min-height: 100vh; padding-bottom: 12rem; }
@@ -311,7 +311,7 @@ p.p { color: var(--muted); margin: .6rem 0; font-size: 1.6rem; }
 .toast { position: fixed; left: 50%; bottom: 3rem; transform: translateX(-50%); z-index: 70; background: var(--panel); color: var(--num); padding: 1.2rem 2rem; font-size: 1.6rem; max-width: 90vw; }
 
 /* ---------- авторизация ---------- */
-.auth { position: fixed; inset: 0; z-index: 30; background: #000 url('/img/auth-bg.jpg') center / cover no-repeat; display: flex; justify-content: center; overflow-y: auto; }
+.auth { position: fixed; inset: 0; z-index: 30; background: #000 url('../img/auth-bg.jpg') center / cover no-repeat; display: flex; justify-content: center; overflow-y: auto; }
 .auth-in { width: 100%; max-width: 60.3rem; padding: 12rem 2.5rem 4rem; display: flex; flex-direction: column; align-items: center; }
 .auth-logo { width: 39.3rem; max-width: 80%; height: auto; margin-bottom: 8rem; filter: drop-shadow(0 0 2rem rgba(0,0,0,.8)); }
 .auth-card { width: 100%; background: rgba(0,0,0,.8); padding: 5rem 4rem; display: flex; flex-direction: column; align-items: center; gap: 2.4rem; }

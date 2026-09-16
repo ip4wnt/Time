@@ -23,7 +23,7 @@ export async function api(method, path, body, opts = {}) {
   else if (body !== undefined) { payload = JSON.stringify(body); headers['Content-Type'] = 'application/json'; }
   let res;
   try {
-    res = await fetch(API + path, { method, headers, body: payload, credentials: 'include' });
+    res = await fetch(API + path, { method, headers, body: payload, credentials: 'same-origin' });
   } catch {
     throw new ApiError(0, 'Нет связи с сервером');
   }
