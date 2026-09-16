@@ -4,12 +4,9 @@
 // без доступа к базе. Нужен, когда файл выгрузки и сервер находятся в разных местах.
 //
 // Использование:
-//   node scripts/import-remote.js <базовый-URL> <логин> <backup.json> "ответ 1" "ответ 2"
+//   node scripts/import-remote.js <базовый-URL> <логин> <backup.json> "часть-вопроса=ответ" ...
 // Пример:
-//   node scripts/import-remote.js http://158.160.177.216 Leo backup.json 106 5890
-//
-// Ответы передаются в том порядке, в котором сервер вернул вопросы; если порядок
-// перепутан, скрипт сам попробует их поменять.
+//   node scripts/import-remote.js http://158.160.212.111 Leo backup.json "лампочк=106" "5+0=5890"
 
 const fs = require('node:fs');
 const { parseLegacy, COLOR_TO_ACTIVITY } = require('./legacy-transform');
@@ -28,41 +25,44 @@ async function api(base, path, { method = 'GET', body, token } = {}) {
   return data;
 }
 
-async function login(base, loginName, answers) {
+// Сервер отдаёт вопросы в случайном порядке, поэтому ответы сопоставляем по тексту вопроса.
+// Ответ задаётся как "часть-вопроса=ответ", например "лампочк=106" и "5+0=5890".
+function parseAnswerSpecs(specs) {
+  return specs.map((raw) => {
+    const i = raw.indexOf('=');
+    if (i < 1) throw new Error(`Ответ нужно задавать как "часть-вопроса=ответ", получено: ${raw}`);
+    return { match: raw.slice(0, i).trim().toLowerCase(), answer: raw.slice(i + 1) };
+  });
+}
+
+async function login(base, loginName, specs) {
   const start = await api(base, '/api/auth/start', { method: 'POST', body: { login: loginName } });
   if (start.status !== 'known') throw new Error(`Пользователь «${loginName}» на сервере не найден — создайте его через scripts/create-user.js`);
-  const qs = start.questions;
-  if (qs.length !== answers.length) throw new Error(`Сервер спрашивает ${qs.length} вопрос(а), а передано ответов: ${answers.length}`);
-  const attempt = async (order) => {
-    const map = {};
-    qs.forEach((q, i) => { map[q.id] = order[i]; });
-    return api(base, '/api/auth/answer', { method: 'POST', body: { challenge: start.challenge, answers: map } });
-  };
-  try {
-    return (await attempt(answers)).token;
-  } catch (e) {
-    if (answers.length !== 2) throw e;
-    console.log('  ответы не подошли в исходном порядке, пробую поменять местами');
-    const again = await api(base, '/api/auth/start', { method: 'POST', body: { login: loginName } });
-    const map = {};
-    again.questions.forEach((q, i) => { map[q.id] = [...answers].reverse()[i]; });
-    return (await api(base, '/api/auth/answer', { method: 'POST', body: { challenge: again.challenge, answers: map } })).token;
+  const map = {};
+  for (const q of start.questions) {
+    const text = String(q.question).toLowerCase();
+    const hit = specs.filter((s) => text.includes(s.match));
+    if (hit.length !== 1) throw new Error(`Не удалось однозначно сопоставить ответ с вопросом «${q.question}» (подошло вариантов: ${hit.length})`);
+    map[q.id] = hit[0].answer;
   }
+  if (Object.keys(map).length !== start.questions.length) throw new Error('Ответы найдены не для всех вопросов');
+  return (await api(base, '/api/auth/answer', { method: 'POST', body: { challenge: start.challenge, answers: map } })).token;
 }
 
 async function main() {
-  const [base0, loginName, file, ...answers] = process.argv.slice(2);
-  if (!base0 || !loginName || !file || answers.length < 1) {
-    console.error('Использование: node scripts/import-remote.js <базовый-URL> <логин> <backup.json> "ответ 1" "ответ 2"');
+  const [base0, loginName, file, ...specsRaw] = process.argv.slice(2);
+  if (!base0 || !loginName || !file || specsRaw.length < 1) {
+    console.error('Использование: node scripts/import-remote.js <базовый-URL> <логин> <backup.json> "часть-вопроса=ответ" "часть-вопроса=ответ"');
     process.exit(1);
   }
+  const specs = parseAnswerSpecs(specsRaw);
   const base = base0.replace(/\/+$/, '');
   const data = JSON.parse(fs.readFileSync(file, 'utf8'));
   const { events, colors, stats } = parseLegacy(data);
   console.log(`В выгрузке: событий-занятий ${stats.activityEvents} (с текстом ${stats.withText}), часов ${stats.hours}, задач ${stats.tasks}`);
 
   console.log(`Вход на ${base} как «${loginName}»`);
-  const token = await login(base, loginName, answers);
+  const token = await login(base, loginName, specs);
 
   // занятия: сопоставляем по названию, недостающие создаём
   const boot = await api(base, '/api/bootstrap', { token });
