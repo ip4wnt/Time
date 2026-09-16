@@ -80,9 +80,38 @@ export async function renderMonth(ym, query = {}) {
     // --- нижняя панель выбора (режим задач)
     document.querySelectorAll('.selbar').forEach((b) => b.remove());
     if (state.mode === 'tasks' && state.selection.size) {
-      const bar = h(`<div class="selbar"><button class="btn ghost" data-act="cancel">отменить</button><button class="btn" data-act="add">добавить</button></div>`);
-      bar.querySelector('[data-act=cancel]').onclick = () => { state.selection.clear(); draw(); };
-      bar.querySelector('[data-act=add]').onclick = () => { location.hash = `#/add?days=${[...state.selection].sort().join(',')}&kind=task&back=${encodeURIComponent(`#/month/${ym}?mode=tasks`)}`; };
+      const bar = h('<div class="selbar"></div>');
+
+      // задачи выделенных дней — чтобы открыть уже созданную, а не только добавить новую
+      const picked = [];
+      const seenIds = new Set();
+      for (const day of [...state.selection].sort()) {
+        for (const e of perDay.get(day) || []) {
+          if (e.kind !== 'task' || seenIds.has(e.id)) continue;
+          seenIds.add(e.id); picked.push(e);
+        }
+      }
+      if (picked.length) {
+        bar.classList.add('with-list');
+        const list = h('<div class="selbar-list"></div>');
+        picked.sort((a, b) => (a.done - b.done) || (a.days[0] < b.days[0] ? -1 : 1) || (a.position - b.position));
+        for (const t of picked) {
+          const a = t.activity_id ? activity(t.activity_id) : null;
+          const days = rangesLabel(t.days.filter((d) => d.startsWith(ym)).map((d) => Number(d.slice(8))));
+          const line = sumLine(days, t.text || '(без текста)', {
+            done: t.done, files: (t.files || []).length,
+            prefix: a ? `<i class="mood-dot" style="background:${a.color}"></i>` : '',
+            onClick: () => openEvent(t, `#/month/${ym}?mode=tasks`),
+          });
+          list.appendChild(line);
+        }
+        bar.appendChild(list);
+      }
+
+      const btns = h(`<div class="selbar-btns"><button class="btn ghost" data-act="cancel">отменить</button><button class="btn" data-act="add">${picked.length ? 'новая задача' : 'добавить'}</button></div>`);
+      btns.querySelector('[data-act=cancel]').onclick = () => { state.selection.clear(); draw(); };
+      btns.querySelector('[data-act=add]').onclick = () => { location.hash = `#/add?days=${[...state.selection].sort().join(',')}&kind=task&back=${encodeURIComponent(`#/month/${ym}?mode=tasks`)}`; };
+      bar.appendChild(btns);
       document.body.appendChild(bar);
     }
   }
@@ -214,8 +243,8 @@ export async function renderMonth(ym, query = {}) {
     page.appendChild(box);
   }
 
-  function openEvent(e) {
-    const back = encodeURIComponent(`#/month/${ym}`);
+  function openEvent(e, backTo) {
+    const back = encodeURIComponent(backTo || `#/month/${ym}`);
     if (e.kind === 'task') location.hash = `#/add?days=${e.days.join(',')}&kind=task&edit=${e.id}&back=${back}`;
     else location.hash = `#/add?day=${e.day}&hours=${(e.hours || []).join(',')}&edit=${e.id}&back=${back}`;
   }

@@ -163,6 +163,16 @@ svg { display: block; }
   background: linear-gradient(to top, rgba(0,0,0,.95), rgba(0,0,0,.6));
 }
 .selbar .btn { flex: 1; max-width: 26rem; }
+.selbar-btns { display: flex; justify-content: center; gap: 2rem; width: 100%; }
+.selbar.with-list {
+  flex-direction: column; gap: 1.6rem;
+  background: #000;
+}
+.selbar-list {
+  width: 100%; display: flex; flex-direction: column; gap: 1.2rem;
+  max-height: 22rem; overflow-y: auto; padding: 1.6rem; background: var(--cell);
+}
+.selbar-list .sum-line { width: 100%; }
 .btn {
   height: 5.8rem; padding: 0 2.4rem; background: var(--panel); color: var(--num); font-size: 1.8rem;
   display: inline-flex; align-items: center; justify-content: center; gap: 1rem; border-radius: 0;
