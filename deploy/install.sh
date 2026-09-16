@@ -8,6 +8,15 @@ set -euo pipefail
 DOMAIN="${DOMAIN:-}"                # пусто — работаем по IP без HTTPS
 EMAIL="${EMAIL:-}"                  # нужен только вместе с DOMAIN
 if [[ -n "$DOMAIN" && -z "$EMAIL" ]]; then echo "С DOMAIN нужно указать EMAIL=почта для сертификата"; exit 1; fi
+
+# Для корневого домена берём сертификат и на www. Отключить: WWW=0
+WWW="${WWW:-1}"
+SERVER_NAMES="$DOMAIN"
+CERT_ARGS="-d $DOMAIN"
+if [[ -n "$DOMAIN" && "$WWW" == "1" && "$(grep -o '\.' <<<"$DOMAIN" | wc -l)" == "1" ]]; then
+  SERVER_NAMES="$DOMAIN www.$DOMAIN"
+  CERT_ARGS="-d $DOMAIN -d www.$DOMAIN"
+fi
 REPO="${REPO:-https://github.com/ip4wnt/Time.git}"
 BRANCH="${BRANCH:-v2}"
 APP_DIR=/opt/chronum
@@ -55,10 +64,11 @@ fi
 echo "== конфигурация"
 if [[ ! -f "$ENV_DIR/.env" ]]; then
   sed -e "s#СМЕНИТЬ_ПАРОЛЬ#$DB_PASS#" -e "s#^UPLOAD_DIR=.*#UPLOAD_DIR=$DATA_DIR/uploads#" deploy/.env.example > "$ENV_DIR/.env"
-  # без HTTPS cookie с флагом Secure не доедет до браузера
-  [[ -z "$DOMAIN" ]] && sed -i 's#^SECURE_COOKIES=.*#SECURE_COOKIES=0#' "$ENV_DIR/.env"
   chmod 640 "$ENV_DIR/.env"; chown root:chronum "$ENV_DIR/.env"
 fi
+# Без HTTPS cookie с флагом Secure не доедет до браузера, с HTTPS — обязателен.
+# Переставляем всегда, включая повторный запуск на уже готовой машине.
+sed -i "s#^SECURE_COOKIES=.*#SECURE_COOKIES=$([[ -n "$DOMAIN" ]] && echo 1 || echo 0)#" "$ENV_DIR/.env"
 
 echo "== схема БД"
 sudo -u chronum env CHRONUM_ENV="$ENV_DIR/.env" node -e "require('./server/db').migrate().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})"
@@ -78,14 +88,15 @@ if [[ -z "$DOMAIN" ]]; then
   URL="http://$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"
 else
   # шаг 1: временный http-конфиг, чтобы прошла ACME-проверка
-  sed "s#server_name _;#server_name $DOMAIN;#" deploy/nginx-http.conf > /etc/nginx/sites-available/chronum
+  sed "s#server_name _;#server_name $SERVER_NAMES;#" deploy/nginx-http.conf > /etc/nginx/sites-available/chronum
   ln -sf /etc/nginx/sites-available/chronum /etc/nginx/sites-enabled/chronum
   mkdir -p /var/www/html
   nginx -t && systemctl reload nginx
   # шаг 2: сертификат
-  certbot certonly --webroot -w /var/www/html -d "$DOMAIN" -m "$EMAIL" --agree-tos --non-interactive --keep-until-expiring
+  certbot certonly --webroot -w /var/www/html $CERT_ARGS -m "$EMAIL" --agree-tos --non-interactive --keep-until-expiring
   # шаг 3: боевой конфиг с HTTPS
-  sed -e "s#example.com#$DOMAIN#g" \
+  sed -e "s#__SERVER_NAMES__#$SERVER_NAMES#g" \
+      -e "s#__CERT_DOMAIN__#$DOMAIN#g" \
       -e "s@# ssl_certificate @ssl_certificate @" \
       -e "s@# ssl_certificate_key @ssl_certificate_key @" \
       -e "s@# include @include @" \
