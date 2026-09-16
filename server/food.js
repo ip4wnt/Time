@@ -152,6 +152,7 @@ const DB = [
   ['мармелад', 320, 0.1, 0.1, 79.4, 15],
   ['сгущёнка|сгущенка', 320, 7.2, 8.5, 56.0],
   ['гранола|мюсли', 400, 10.0, 12.0, 65.0],
+  ['батончик|протеиновый батончик|злаковый батончик', 380, 15.0, 12.0, 50.0, 45],
   // супы и готовые блюда
   ['борщ', 49, 2.0, 2.5, 4.5, 300],
   ['щи', 33, 1.5, 1.5, 3.5, 300],
@@ -238,17 +239,51 @@ function matchProduct(words) {
   for (const prod of INDEX) {
     for (const v of prod.variants) {
       // все слова варианта должны встречаться среди слов записи
-      const ok = v.words.every((vw) => stems.some((s) => s === vw || (vw.length >= 4 && (s.startsWith(vw) || vw.startsWith(s)))));
+      let exact = 0, ok = true;
+      for (const vw of v.words) {
+        if (stems.some((s) => s === vw)) { exact++; continue; }
+        if (stems.some((s) => vw.length >= 4 && (s.startsWith(vw) || vw.startsWith(s)))) continue;
+        ok = false; break;
+      }
       if (!ok) continue;
-      const score = v.words.length * 10 + v.words.join('').length; // предпочитаем более конкретное совпадение
+      // Точное совпадение основы важнее длины: иначе «слива» подтягивает «сливки»,
+      // потому что основа «сливк» длиннее и начинается на «слив».
+      const score = v.words.length * 1000 + exact * 100 + v.words.join('').length;
       if (!best || score > best.score) best = { prod, score, variant: v.label };
     }
   }
   return best;
 }
 
+// «120 ккал/100 г», «120ккал на 100г» — калорийность с упаковки.
+const PER100_RE = /(\d+(?:[.,]\d+)?)\s*(?:ккал|кал)\s*(?:\/|на)\s*(\d+(?:[.,]\d+)?)\s*(?:грамм\w*|гр|г|мл)(?![a-zа-я])/i;
+// «38x5г», «38 х 5 г», «2*150г» — количество штук на вес одной.
+const MULT_RE = /(\d+(?:[.,]\d+)?)\s*[xх×*]\s*(\d+(?:[.,]\d+)?)/i;
+
 function parseItem(raw) {
-  const text = norm(raw);
+  let src = String(raw);
+  const num = (s) => parseFloat(String(s).replace(',', '.'));
+
+  // Калорийность на 100 г вырезаем до общего разбора, иначе числа из неё уйдут в вес.
+  let per100Kcal = null;
+  const per100 = src.match(PER100_RE);
+  if (per100) {
+    const base = num(per100[2]);
+    if (base > 0) per100Kcal = num(per100[1]) * (100 / base);
+    src = src.replace(per100[0], ' ');
+  }
+
+  // Множитель: 38x5г → 190 г.
+  let multNote = null;
+  const mult = src.match(MULT_RE);
+  if (mult) {
+    const a = num(mult[1]), b = num(mult[2]);
+    const res = Math.round(a * b * 100) / 100;
+    multNote = `${a} × ${b} = ${res}`;
+    src = src.replace(mult[0], String(res));
+  }
+
+  const text = norm(src);
   if (!text) return null;
   const tokens = text.split(' ');
   let qty = null, unit = null, explicitKcal = null;
@@ -281,18 +316,25 @@ function parseItem(raw) {
     if (/^(половина|половину|пол)$/.test(t)) { qty = qty || { grams: 0.5, kind: 'pc' }; continue; }
     words.push(t);
   }
-  return { raw: raw.trim(), words, qty, explicitKcal };
+  return { raw: String(raw).trim(), words, qty, explicitKcal, per100Kcal, multNote };
 }
 
 function calcItem(item) {
   const m = matchProduct(item.words);
   const out = { input: item.raw, product: null, grams: null, kcal: 0, protein: 0, fat: 0, carbs: 0, note: '' };
   if (!m) {
-    if (item.explicitKcal != null) {
+    if (item.per100Kcal != null) {
+      const g = item.qty && item.qty.kind === 'g' ? item.qty.grams : 100;
+      out.product = item.words.join(' ') || 'продукт';
+      out.grams = Math.round(g);
+      out.kcal = Math.round(item.per100Kcal * g / 100);
+      out.note = `продукт не распознан, считали по ${Math.round(item.per100Kcal)} ккал/100 г`;
+    } else if (item.explicitKcal != null) {
       out.kcal = item.explicitKcal; out.product = item.words.join(' ') || 'продукт'; out.note = 'продукт не распознан, взяты указанные ккал';
     } else {
       out.note = 'продукт не распознан';
     }
+    if (item.multNote) out.note = `${item.multNote}; ${out.note}`;
     return out;
   }
   const p = m.prod;
@@ -319,12 +361,17 @@ function calcItem(item) {
   }
   out.grams = Math.round(grams);
   const k = grams / 100;
-  out.kcal = item.explicitKcal != null ? item.explicitKcal : Math.round(p.kcal * k);
+  const kcal100 = item.per100Kcal != null ? item.per100Kcal : p.kcal;
+  out.kcal = item.explicitKcal != null ? item.explicitKcal : Math.round(kcal100 * k);
+  if (item.per100Kcal != null) out.note = (out.note ? out.note + '; ' : '') + `${Math.round(item.per100Kcal)} ккал/100 г из записи`;
   if (item.explicitKcal != null) out.note = (out.note ? out.note + '; ' : '') + 'ккал взяты из записи';
-  out.protein = Math.round(p.p * k * 10) / 10;
-  out.fat = Math.round(p.f * k * 10) / 10;
-  out.carbs = Math.round(p.c * k * 10) / 10;
-  out.per100 = { kcal: p.kcal, protein: p.p, fat: p.f, carbs: p.c };
+  if (item.multNote) out.note = `${item.multNote}${out.note ? '; ' + out.note : ''}`;
+  // КБЖУ — из таблицы; если калорийность задана вручную, масштабируем их пропорционально.
+  const adj = item.per100Kcal != null && p.kcal > 0 ? item.per100Kcal / p.kcal : 1;
+  out.protein = Math.round(p.p * adj * k * 10) / 10;
+  out.fat = Math.round(p.f * adj * k * 10) / 10;
+  out.carbs = Math.round(p.c * adj * k * 10) / 10;
+  out.per100 = { kcal: Math.round(kcal100), protein: Math.round(p.p * adj * 10) / 10, fat: Math.round(p.f * adj * 10) / 10, carbs: Math.round(p.c * adj * 10) / 10 };
   return out;
 }
 
