@@ -13,7 +13,9 @@ BRANCH="${BRANCH:-v2}"
 APP_DIR=/opt/chronum
 DATA_DIR=/var/lib/chronum
 ENV_DIR=/etc/chronum
-DB_PASS="${DB_PASS:-$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)}"
+# Без `tr | head`: head закрывает канал, tr получает SIGPIPE и pipefail роняет скрипт молча.
+gen_pass() { openssl rand -hex 24 2>/dev/null || date +%s%N | sha256sum | cut -c1-48; }
+DB_PASS="${DB_PASS:-$(gen_pass)}"
 
 echo "== пакеты"
 apt-get update -q
