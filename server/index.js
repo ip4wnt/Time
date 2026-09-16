@@ -29,6 +29,8 @@ async function handleApi(req, res, url) {
   if (!match) throw new HttpError(404, 'Нет такого метода API');
   req.ip = clientIp(req);
   req.sessionToken = sessionTokenFrom(req);
+  // для <img>/<audio> заголовок не передать — разрешаем токен в query только для чтения файлов
+  if (!req.sessionToken && req.method === 'GET' && url.pathname.startsWith('/api/files/')) req.sessionToken = url.searchParams.get('t') || null;
   let user = null;
   if (!match.opts.public) {
     user = await auth.getSessionUser(req.sessionToken);

@@ -1,0 +1,73 @@
+// Иконки — инлайн SVG, обводка currentColor.
+const w = (body, vb = '0 0 24 24') => `<svg viewBox="${vb}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+
+export const I = {
+  menu: w('<path d="M3 6h18M3 12h18M3 18h18"/>'),
+  close: w('<path d="M5 5l14 14M19 5L5 19"/>'),
+  search: w('<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>'),
+  calendar: w('<rect x="3" y="5" width="18" height="16" rx="1"/><path d="M3 10h18M8 3v4M16 3v4"/>'),
+  clock: w('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+  back: w('<path d="M15 5l-7 7 7 7"/>'),
+  fwd: w('<path d="M9 5l7 7-7 7"/>'),
+  up: w('<path d="M12 19V6M6 12l6-6 6 6"/>'),
+  down: w('<path d="M12 5v13M6 12l6 6 6-6"/>'),
+  levelUp: w('<path d="M5 20V9h12"/><path d="M13 5l4 4-4 4"/>'),
+  levelDown: w('<path d="M5 4v11h12"/><path d="M13 11l4 4-4 4"/>'),
+  chevron: w('<path d="M6 9l6 6 6-6"/>'),
+  plus: w('<path d="M12 5v14M5 12h14"/>'),
+  minus: w('<path d="M5 12h14"/>'),
+  check: w('<path d="M5 12l5 5L20 7"/>'),
+  paperclip: w('<path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7l9-9a3.3 3.3 0 0 1 4.7 4.7l-9 9a1.6 1.6 0 0 1-2.3-2.3l8.3-8.3"/>'),
+  star: w('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>'),
+  starFill: w('<path fill="currentColor" d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>'),
+  timer: w('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6M12 2v3"/>'),
+  apple: w('<path d="M12 8c-1.5-1.2-3.6-1.2-5 .2-2.6 2.6-1.6 8.4 1.2 11.3 1.3 1.3 2.4 1 3.8.5 1.4.5 2.5.8 3.8-.5 2.8-2.9 3.8-8.7 1.2-11.3-1.4-1.4-3.5-1.4-5-.2z"/><path d="M12 8c0-2.5 1.5-4 4-4.5"/>'),
+  list: w('<path d="M9 6h12M9 12h12M9 18h12"/><path d="M3 6l1.2 1.2L6.5 5M3 12l1.2 1.2L6.5 11M3 18l1.2 1.2L6.5 17"/>'),
+  ruble: w('<path d="M8 20V4h5a4 4 0 0 1 0 8H6M6 16h8"/>'),
+  cloud: w('<path d="M8 17.5h9a4 4 0 0 0 .5-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 8 17.5z"/><circle cx="6" cy="20" r="1"/><circle cx="3.5" cy="17.5" r=".7"/>'),
+  palette: `<svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="8" r="3.4" fill="#51006C"/><circle cx="10" cy="13" r="3.4" fill="#B71506"/><circle cx="24" cy="13" r="3.4" fill="#73D383"/><circle cx="8" cy="21" r="3.4" fill="#AA952E"/><circle cx="26" cy="21" r="3.4" fill="#FF81BC"/><circle cx="17" cy="26" r="3.4" fill="#476FAF"/></svg>`,
+  filter: w('<path d="M3 5h18l-7 8v6l-4 2v-8z"/>'),
+  sort: w('<path d="M4 6h16M7 12h10M10 18h4"/>'),
+  book: w('<path d="M12 6c-2-1.5-4.5-2-8-2v14c3.5 0 6 .5 8 2 2-1.5 4.5-2 8-2V4c-3.5 0-6 .5-8 2z"/><path d="M12 6v14"/>'),
+  user: w('<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/>'),
+  logout: w('<path d="M10 4H4v16h6M14 8l4 4-4 4M8 12h10"/>'),
+  gear: w('<circle cx="12" cy="12" r="3"/><path d="M12 2.5l1.6 2.4 2.8-.7.7 2.8 2.4 1.6-1.4 2.5 1.4 2.5-2.4 1.6-.7 2.8-2.8-.7L12 21.5l-1.6-2.4-2.8.7-.7-2.8-2.4-1.6L5.9 12 4.5 9.5l2.4-1.6.7-2.8 2.8.7z"/>'),
+  folder: w('<path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>'),
+  folderPlus: w('<path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M12 11v6M9 14h6"/>'),
+  file: w('<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>'),
+  filePlus: w('<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M12 10v6M9 13h6"/>'),
+  pencil: w('<path d="M4 20l4-1L19 8l-3-3L5 16z"/><path d="M14 7l3 3"/>'),
+  scissors: w('<circle cx="7" cy="18" r="3"/><circle cx="17" cy="18" r="3"/><path d="M9 16L19 3M15 16L5 3"/>'),
+  paste: w('<rect x="5" y="5" width="14" height="16" rx="1"/><path d="M9 5V3h6v2M12 10v6M9 13h6"/>'),
+  trash: w('<path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14"/><path d="M10 11v6M14 11v6"/>'),
+  undo: w('<path d="M8 8H3V3"/><path d="M3.5 8A9 9 0 1 1 3 13"/>'),
+  download: w('<path d="M12 4v11M7 10l5 5 5-5M4 20h16"/>'),
+  mic: w('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/>'),
+  stop: w('<rect x="6" y="6" width="12" height="12" rx="1" fill="currentColor"/>'),
+  image: w('<rect x="3" y="5" width="18" height="14" rx="1"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/>'),
+  audio: w('<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10v4"/>'),
+  compass: w('<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>'),
+  flag: w('<path d="M5 21V4h11l-1.5 3.5L16 11H5"/>'),
+  shuffle: w('<path d="M3 7h3l4 5M3 17h3l4-5 4-5h4M14 17h4"/><path d="M19 5l2 2-2 2M19 15l2 2-2 2"/>'),
+  heart: w('<path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/>'),
+  bulb: w('<path d="M9 18h6M10 21h4M8 13a5.5 5.5 0 1 1 8 0c-1 1-1.5 2-1.5 3h-5c0-1-.5-2-1.5-3z"/>'),
+  home: w('<path d="M4 11l8-7 8 7v9H4z"/><path d="M10 20v-6h4v6"/>'),
+  briefcase: w('<rect x="3" y="7" width="18" height="13" rx="1"/><path d="M9 7V4h6v3M3 12h18"/>'),
+  music: w('<path d="M9 18V5l10-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>'),
+  camera: w('<path d="M4 8h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/>'),
+  leaf: w('<path d="M5 20c0-9 5-14 14-15-1 9-6 14-14 15z"/><path d="M5 20l8-8"/>'),
+  target: w('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>'),
+  sad: w('<circle cx="12" cy="12" r="9"/><path d="M8 16c1-1.3 2.4-2 4-2s3 .7 4 2M9 10h.01M15 10h.01"/>'),
+  neutral: w('<circle cx="12" cy="12" r="9"/><path d="M8 15h8M9 10h.01M15 10h.01"/>'),
+  happy: w('<circle cx="12" cy="12" r="9"/><path d="M8 14c1 1.5 2.4 2.3 4 2.3s3-.8 4-2.3M9 10h.01M15 10h.01"/>'),
+  play: w('<path d="M7 5v14l11-7z"/>'),
+  more: w('<circle cx="6" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18" cy="12" r="1.2"/>'),
+};
+
+// иконки для папок/заметок (выбор пользователем)
+export const NOTE_ICONS = ['folder', 'file', 'compass', 'flag', 'shuffle', 'star', 'heart', 'book', 'bulb', 'home', 'briefcase', 'music', 'camera', 'leaf', 'target', 'list'];
+
+// иконки видов событий
+export const KIND_ICON = { activity: 'palette', food: 'apple', task: 'list', money: 'ruble', thought: 'cloud', counter: 'timer' };
+export const KIND_LABEL = { activity: 'занятие', food: 'еда', task: 'задача', money: 'деньги', thought: 'мысль', counter: 'счётчик' };
+export const MOOD_ICON = { sad: 'sad', neutral: 'neutral', happy: 'happy' };
