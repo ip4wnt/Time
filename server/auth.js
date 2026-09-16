@@ -143,14 +143,13 @@ function validateQuestions(questions) {
 }
 
 // Регистрация: имя + 2 вопроса с ответами
-async function register(login, questions, req) {
-  await checkRateLimit(req.ip);
+async function createUser(login, questions) {
   const norm = normalizeLogin(login);
   if (!norm || norm.length > 64) throw new HttpError(400, 'Введите имя');
   validateQuestions(questions);
   const exists = await db.query('SELECT 1 FROM users WHERE login_norm = $1', [norm]);
   if (exists.rowCount) throw new HttpError(409, 'Это имя уже занято');
-  const userId = await db.tx(async (c) => {
+  return db.tx(async (c) => {
     const u = await c.query('INSERT INTO users(login, login_norm) VALUES ($1,$2) RETURNING id', [String(login).trim(), norm]);
     const id = u.rows[0].id;
     let pos = 0;
@@ -160,11 +159,15 @@ async function register(login, questions, req) {
     await seedDefaults(c, id);
     return id;
   });
-  await logAttempt(norm, req.ip, true);
+}
+
+async function register(login, questions, req) {
+  await checkRateLimit(req.ip);
+  const userId = await createUser(login, questions);
+  await logAttempt(normalizeLogin(login), req.ip, true);
   return createSession(userId, req);
 }
 
-// Стартовый набор занятий из макета «меню»
 const DEFAULT_ACTIVITIES = [
   { name: 'сон', color: '#262626', is_sleep: true },
   { name: 'мысли', color: '#4A4A4A' },
@@ -214,6 +217,7 @@ async function updateQuestions(userId, questions) {
 }
 
 module.exports = {
+  createUser,
   normalizeLogin, hashAnswer, verifyAnswer, createSession, getSessionUser, destroySession,
   start, answer, register, updateQuestions, seedDefaults, DEFAULT_ACTIVITIES,
 };
