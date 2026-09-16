@@ -1,0 +1,28 @@
+[Unit]
+Description=ХРОНУМ — трекер времени (Node.js)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=chronum
+Group=chronum
+WorkingDirectory=/opt/chronum
+Environment=NODE_ENV=production
+Environment=CHRONUM_ENV=/etc/chronum/.env
+ExecStart=/usr/bin/node server/index.js
+Restart=always
+RestartSec=3
+
+# Ограничения безопасности
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/chronum
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
