@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Установка ХРОНУМ на чистый Ubuntu 22.04/24.04 VPS.
-# Запуск от root:  DOMAIN=time.example.com EMAIL=you@example.com bash deploy/install.sh
+# С доменом и HTTPS:  sudo DOMAIN=time.example.com EMAIL=you@example.com bash deploy/install.sh
+# Без домена (по IP, http): sudo bash deploy/install.sh
 # Скрипт идемпотентный — можно запускать повторно (обновление кода: git pull && systemctl restart chronum).
 set -euo pipefail
 
-DOMAIN="${DOMAIN:?Укажите DOMAIN=ваш.домен}"
-EMAIL="${EMAIL:?Укажите EMAIL=почта для Lets Encrypt}"
+DOMAIN="${DOMAIN:-}"                # пусто — работаем по IP без HTTPS
+EMAIL="${EMAIL:-}"                  # нужен только вместе с DOMAIN
+if [[ -n "$DOMAIN" && -z "$EMAIL" ]]; then echo "С DOMAIN нужно указать EMAIL=почта для сертификата"; exit 1; fi
 REPO="${REPO:-https://github.com/ip4wnt/Time.git}"
 BRANCH="${BRANCH:-v2}"
 APP_DIR=/opt/chronum
@@ -15,7 +17,9 @@ DB_PASS="${DB_PASS:-$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)}"
 
 echo "== пакеты"
 apt-get update -q
-apt-get install -y -q ca-certificates curl git nginx postgresql postgresql-contrib certbot python3-certbot-nginx
+PKGS="ca-certificates curl git nginx postgresql postgresql-contrib"
+[[ -n "$DOMAIN" ]] && PKGS="$PKGS certbot python3-certbot-nginx"
+apt-get install -y -q $PKGS
 
 if ! command -v node >/dev/null || [[ "$(node -v | cut -c2-3)" -lt 20 ]]; then
   echo "== Node.js 20"
@@ -49,11 +53,13 @@ fi
 echo "== конфигурация"
 if [[ ! -f "$ENV_DIR/.env" ]]; then
   sed -e "s#СМЕНИТЬ_ПАРОЛЬ#$DB_PASS#" -e "s#^UPLOAD_DIR=.*#UPLOAD_DIR=$DATA_DIR/uploads#" deploy/.env.example > "$ENV_DIR/.env"
+  # без HTTPS cookie с флагом Secure не доедет до браузера
+  [[ -z "$DOMAIN" ]] && sed -i 's#^SECURE_COOKIES=.*#SECURE_COOKIES=0#' "$ENV_DIR/.env"
   chmod 640 "$ENV_DIR/.env"; chown root:chronum "$ENV_DIR/.env"
 fi
 
 echo "== схема БД"
-sudo -u chronum CHRONUM_ENV="$ENV_DIR/.env" node -e "require('./server/db').migrate().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})"
+sudo -u chronum env CHRONUM_ENV="$ENV_DIR/.env" node -e "require('./server/db').migrate().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})"
 
 echo "== systemd"
 install -m 644 deploy/chronum.service /etc/systemd/system/chronum.service
@@ -61,26 +67,37 @@ systemctl daemon-reload
 systemctl enable -q --now chronum
 systemctl restart chronum
 
-echo "== nginx + Let's Encrypt"
-sed "s#example.com#$DOMAIN#g" deploy/nginx.conf > /etc/nginx/sites-available/chronum
-ln -sf /etc/nginx/sites-available/chronum /etc/nginx/sites-enabled/chronum
+echo "== nginx"
 rm -f /etc/nginx/sites-enabled/default
-# до получения сертификата временно отключаем 443-блок
-if [[ ! -d /etc/letsencrypt/live/$DOMAIN ]]; then
-  awk 'BEGIN{skip=0} /listen 443/{skip=1} skip==0{print} /^}/{if(skip==1){skip=0}}' /etc/nginx/sites-available/chronum > /tmp/chronum-http.conf
-  # первый блок (80) без редиректа, чтобы прошла ACME-проверка
-  sed -i 's#return 301 https://\$host\$request_uri;#proxy_pass http://127.0.0.1:3000;#' /tmp/chronum-http.conf
-  cp /tmp/chronum-http.conf /etc/nginx/sites-enabled/chronum
-  nginx -t && systemctl reload nginx
-  certbot --nginx -d "$DOMAIN" -m "$EMAIL" --agree-tos --non-interactive --redirect
+if [[ -z "$DOMAIN" ]]; then
+  install -m 644 deploy/nginx-http.conf /etc/nginx/sites-available/chronum
   ln -sf /etc/nginx/sites-available/chronum /etc/nginx/sites-enabled/chronum
-  certbot --nginx -d "$DOMAIN" --non-interactive --reinstall >/dev/null 2>&1 || true
+  nginx -t && systemctl reload nginx
+  URL="http://$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"
+else
+  # шаг 1: временный http-конфиг, чтобы прошла ACME-проверка
+  sed "s#server_name _;#server_name $DOMAIN;#" deploy/nginx-http.conf > /etc/nginx/sites-available/chronum
+  ln -sf /etc/nginx/sites-available/chronum /etc/nginx/sites-enabled/chronum
+  mkdir -p /var/www/html
+  nginx -t && systemctl reload nginx
+  # шаг 2: сертификат
+  certbot certonly --webroot -w /var/www/html -d "$DOMAIN" -m "$EMAIL" --agree-tos --non-interactive --keep-until-expiring
+  # шаг 3: боевой конфиг с HTTPS
+  sed -e "s#example.com#$DOMAIN#g" \
+      -e "s@# ssl_certificate @ssl_certificate @" \
+      -e "s@# ssl_certificate_key @ssl_certificate_key @" \
+      -e "s@# include @include @" \
+      -e "s@# ssl_dhparam @ssl_dhparam @" deploy/nginx.conf > /etc/nginx/sites-available/chronum
+  [[ -f /etc/letsencrypt/options-ssl-nginx.conf ]] || sed -i '/options-ssl-nginx.conf/d' /etc/nginx/sites-available/chronum
+  [[ -f /etc/letsencrypt/ssl-dhparams.pem ]] || sed -i '/ssl-dhparams.pem/d' /etc/nginx/sites-available/chronum
+  nginx -t && systemctl reload nginx
+  systemctl enable -q certbot.timer 2>/dev/null || true
+  URL="https://$DOMAIN"
 fi
-nginx -t && systemctl reload nginx
-systemctl enable -q certbot.timer 2>/dev/null || true
 
 echo
-echo "Готово: https://$DOMAIN"
-echo "Создать пользователя:  cd $APP_DIR && sudo -u chronum CHRONUM_ENV=$ENV_DIR/.env node scripts/create-user.js \"Логин\" \"Вопрос 1\" \"Ответ 1\" \"Вопрос 2\" \"Ответ 2\""
-echo "Импорт старой выгрузки: sudo -u chronum CHRONUM_ENV=$ENV_DIR/.env node scripts/import-legacy.js \"Логин\" /путь/backup.json"
+echo "Готово: $URL"
+[[ -n "$DOMAIN" ]] || echo "ВНИМАНИЕ: сейчас без HTTPS. Появится домен — перезапустите: sudo DOMAIN=ваш.домен EMAIL=почта bash deploy/install.sh"
+echo "Создать пользователя:  cd $APP_DIR && sudo -u chronum env CHRONUM_ENV=$ENV_DIR/.env node scripts/create-user.js \"Логин\" \"Вопрос 1\" \"Ответ 1\" \"Вопрос 2\" \"Ответ 2\""
+echo "Импорт старой выгрузки: sudo -u chronum env CHRONUM_ENV=$ENV_DIR/.env node scripts/import-legacy.js \"Логин\" /путь/backup.json"
 echo "Логи: journalctl -u chronum -f"

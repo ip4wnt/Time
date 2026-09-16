@@ -35,8 +35,15 @@ node scripts/import-legacy.js "Логин" backup.json   # выгрузка из
 
 ```bash
 git clone -b v2 https://github.com/ip4wnt/Time.git && cd Time
+
+# с доменом и HTTPS (Let's Encrypt)
 sudo DOMAIN=time.example.com EMAIL=you@example.com bash deploy/install.sh
+
+# или пока без домена — по IP на 80-м порту, без HTTPS
+sudo bash deploy/install.sh
 ```
+
+Когда домен появится, просто перезапустите скрипт с `DOMAIN` и `EMAIL` — он получит сертификат и переключит nginx на HTTPS.
 
 Скрипт ставит Node 20, PostgreSQL, nginx, certbot; создаёт БД и пользователя ОС `chronum`, раскладывает код в `/opt/chronum`, конфиг в `/etc/chronum/.env`, файлы в `/var/lib/chronum/uploads`, запускает сервис `chronum` и получает сертификат Let's Encrypt.
 
