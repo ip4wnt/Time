@@ -243,7 +243,9 @@ function matchProduct(words) {
       let exact = 0, ok = true;
       for (const vw of v.words) {
         if (stems.some((s) => s === vw)) { exact++; continue; }
-        if (stems.some((s) => vw.length >= 4 && (s.startsWith(vw) || vw.startsWith(s)))) continue;
+        // Нечёткое сравнение только когда обе основы достаточно длинные:
+        // иначе короткое слово вроде «бю» совпадает с любым названием на ту же букву.
+        if (stems.some((s) => vw.length >= 4 && s.length >= 4 && (s.startsWith(vw) || vw.startsWith(s)))) continue;
         ok = false; break;
       }
       if (!ok) continue;
