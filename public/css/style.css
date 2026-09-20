@@ -253,12 +253,17 @@ svg { display: block; }
 select.field { appearance: none; -webkit-appearance: none; }
 
 /* ---------- меню ---------- */
-.menu { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.96); overflow-y: auto; }
+/* Фон меню — градиент из макета (CSS, без картинки). Опорные цвета сняты
+   с макета по вертикали: пик подсветки на 30% высоты, к 68% уже чёрный. */
+.menu {
+  position: fixed; inset: 0; z-index: 40; overflow-y: auto;
+  background: #000 linear-gradient(180deg,
+    #071513 0%, #081B1A 10%, #0B2423 20%, #0D2D2C 30%,
+    #0A2322 40%, #071817 50%, #030B0B 60%, #000 68%);
+}
 .menu .menu-in { max-width: 60.3rem; margin: 0 auto; padding-bottom: 6rem; }
 .menu-block { position: relative; padding: 1.6rem 2.5rem; display: flex; flex-direction: column; align-items: flex-end; gap: 0; }
 .menu-block + .menu-block { border-top: .1rem solid var(--text); }
-.menu-block .gear { position: absolute; left: 2.5rem; top: 2rem; width: 3.6rem; height: 3.6rem; color: var(--num); }
-.menu-block .gear svg { width: 100%; height: 100%; }
 .mi { display: flex; align-items: center; justify-content: flex-end; gap: 1.6rem; height: 6.8rem; font-size: 2.2rem; color: var(--text); text-align: right; }
 .mi svg { width: 2.8rem; height: 2.8rem; color: var(--num); flex: none; }
 .mi .dot { width: 2.5rem; height: 2.5rem; border-radius: 50%; flex: none; }

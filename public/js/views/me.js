@@ -1,11 +1,11 @@
-// Страница «я»: контрольные вопросы, настройки, сессии.
+// Страница «профиль»: контрольные вопросы, норма калорий, сессии.
 import { get, put, post, setToken } from '../api.js';
 import { state, esc, kcalNorm } from '../state.js';
 import { h, header, toast, confirm } from '../ui.js';
 
 export async function renderMe() {
   const app = document.getElementById('app');
-  app.appendChild(header({ title: 'я', icon: 'user' }));
+  app.appendChild(header({ title: 'профиль', icon: 'user' }));
   const page = h('<div class="page"></div>');
   app.appendChild(page);
   const me = await get('/api/me');

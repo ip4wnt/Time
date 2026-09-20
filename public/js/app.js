@@ -1,7 +1,7 @@
 // ХРОНУМ — точка входа фронтенда: маршрутизация, меню, авторизация.
 import { hasToken, setToken, post } from './api.js';
 import { I } from './icons.js';
-import { state, loadBootstrap, loadPrefs, loadDates, todayStr, ymOf, esc, activeActivities } from './state.js';
+import { state, loadBootstrap, loadPrefs, loadDates, todayStr, ymOf, esc } from './state.js';
 import { h, toast } from './ui.js';
 import { renderAuth } from './views/auth.js';
 import { renderMonth } from './views/month.js';
@@ -37,7 +37,8 @@ const ROUTES = {
   thoughts: () => renderThoughts(),
   me: () => renderMe(),
   search: (p, q) => renderSearch(q),
-  activities: () => renderActivities(),
+  settings: () => renderActivities(),
+  activities: () => renderActivities(), // старая ссылка — ведёт в настройки
 };
 
 async function route() {
@@ -61,16 +62,11 @@ async function route() {
 // ---------- меню ----------
 function openMenu() {
   closeMenu();
-  const acts = activeActivities();
   const el = h(`<div class="menu"><div class="menu-in">
     <header class="hdr"><button class="hdr-btn" data-act="close" aria-label="закрыть">${I.close}</button><div class="hdr-title"><span>меню</span></div><button class="hdr-btn" data-act="search" aria-label="поиск">${I.search}</button></header>
     <div class="menu-block">
       <a class="mi" href="#/month">месяц ${I.calendar}</a>
       <a class="mi" href="#/day">день ${I.clock}</a>
-    </div>
-    <div class="menu-block">
-      <a class="gear" href="#/activities" aria-label="настройки занятий">${I.gear}</a>
-      ${acts.map((a) => `<span class="mi off" title="страница занятия — скоро">${esc(a.name)} <i class="dot" style="background:${a.color}"></i></span>`).join('')}
     </div>
     <div class="menu-block">
       <a class="mi" href="#/notes">заметки ${I.book}</a>
@@ -82,7 +78,8 @@ function openMenu() {
       <a class="mi" href="#/thoughts">мысли ${I.cloud}</a>
     </div>
     <div class="menu-block">
-      <a class="mi" href="#/me">я ${I.user}</a>
+      <a class="mi" href="#/settings">настройки ${I.gear}</a>
+      <a class="mi" href="#/me">профиль ${I.user}</a>
       <button class="mi" data-act="logout">выйти ${I.logout}</button>
     </div>
   </div></div>`);
