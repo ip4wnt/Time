@@ -257,6 +257,30 @@ router.add('GET', '/api/thoughts', async ({ user, query }) => {
 // ---------------- food calc ----------------
 router.add('POST', '/api/food/calc', async ({ body }) => food.calc(str(body.text, 5000)));
 
+// Подсказки по ранее введённым строкам еды: записи режем на отдельные продукты
+// (переводы строки, запятые, точки с запятой) и отдаём самые свежие совпадения.
+// Сначала идут строки, начинающиеся с запроса, потом те, где он внутри.
+router.add('GET', '/api/food/suggest', async ({ user, query }) => {
+  const q = str(query.q, 100).trim();
+  if (q.length < 2) return { items: [] };
+  const esc = q.replace(/[%_\\]/g, (m) => '\\' + m);
+  const r = await db.query(`
+    WITH parts AS (
+      SELECT btrim(regexp_replace(p, '\\s+', ' ', 'g')) AS line, e.day, e.id
+        FROM events e, regexp_split_to_table(e.text, '[\n;,]+') AS p
+       WHERE e.user_id = $1 AND e.kind = 'food' AND e.text IS NOT NULL
+    ), uniq AS (
+      SELECT line, max(day) AS last_day, max(id) AS last_id, count(*)::int AS n
+        FROM parts
+       WHERE char_length(line) BETWEEN 2 AND 120 AND (line ILIKE $2 OR line ILIKE $3)
+       GROUP BY line
+    )
+    SELECT line, n FROM uniq
+     ORDER BY (line ILIKE $2) DESC, last_day DESC, last_id DESC
+     LIMIT 50`, [user.id, esc + '%', '%' + esc + '%']);
+  return { items: r.rows.map((x) => ({ line: x.line, n: x.n })) };
+});
+
 // ---------------- important dates ----------------
 router.add('GET', '/api/dates', async ({ user }) => {
   const r = await db.query('SELECT id, day, yearly, title FROM important_dates WHERE user_id=$1 ORDER BY day', [user.id]);

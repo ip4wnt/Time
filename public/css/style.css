@@ -225,6 +225,12 @@ svg { display: block; }
 .mood { width: 5.4rem; height: 5.4rem; border-radius: 50%; border: .25rem solid transparent; display: grid; place-items: center; }
 .mood.on { border-color: var(--num); }
 .mood svg { width: 3rem; height: 3rem; color: #000; }
+.food-ac { position: relative; }
+.food-ac-list { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; max-height: 26rem; overflow-y: auto; background: var(--panel); border: .1rem solid var(--stroke); }
+.food-ac-list button { display: flex; width: 100%; align-items: baseline; gap: 1rem; text-align: left; background: none; border: 0; color: var(--text); font: inherit; font-size: 1.6rem; padding: 1rem 1.4rem; cursor: pointer; }
+.food-ac-list button + button { border-top: .1rem solid var(--cell); }
+.food-ac-list button.on, .food-ac-list button:hover { background: var(--cell); color: var(--num); }
+.food-ac-list .n { margin-left: auto; color: var(--muted); font-size: 1.4rem; }
 .food-result { margin-top: 1.6rem; background: var(--cell); padding: 1.6rem 2rem; font-size: 1.6rem; color: var(--text); }
 .food-result table { width: 100%; border-collapse: collapse; }
 .food-result td { padding: .3rem 0; vertical-align: top; }

@@ -259,31 +259,59 @@ function matchProduct(words) {
 }
 
 // «120 ккал/100 г», «120ккал на 100г» — калорийность с упаковки.
-const PER100_RE = /(\d+(?:[.,]\d+)?)\s*(?:ккал|кал)\s*(?:\/|на)\s*(\d+(?:[.,]\d+)?)\s*(?:грамм\w*|гр|г|мл)(?![a-zа-я])/i;
-// «38x5г», «38 х 5 г», «2*150г» — количество штук на вес одной.
-const MULT_RE = /(\d+(?:[.,]\d+)?)\s*[xх×*]\s*(\d+(?:[.,]\d+)?)/i;
+const PER100_RE = /(\d+(?:[.,]\d+)?)\s*(?:ккал|кал)\s*(?:\/|на)\s*(\d+(?:[.,]\d+)?)\s*(?:грамм\w*|гр|г|мл)?(?![a-zа-я])/i;
+// Короткая запись того же: «120/100», «120/100г». Знаменатель только 100 или 1000,
+// иначе под раздачу попадут дроби вроде «1/2 банана».
+const SHORT_PER100_RE = /(\d+(?:[.,]\d+)?)\s*\/\s*(100|1000)\s*(?:грамм\w*|гр|г|мл)?(?![a-zа-я0-9])/i;
+// Арифметика в количестве: «640-120г», «38x5г», «120+80 г», «2*150г».
+const EXPR_RE = /(\d+(?:[.,]\d+)?)((?:\s*[-+xх×*]\s*\d+(?:[.,]\d+)?)+)/i;
+
+const toNum = (s) => parseFloat(String(s).replace(',', '.'));
+
+// Считает выражение из целых/дробных чисел с + − ×. Умножение старше,
+// остальное слева направо. Возвращает { value, pretty } или null.
+function evalExpr(text) {
+  const parts = String(text).match(/\d+(?:[.,]\d+)?|[-+xх×*]/gi);
+  if (!parts || parts.length < 3) return null;
+  const nums = [toNum(parts[0])];
+  const ops = [];
+  for (let i = 1; i < parts.length; i += 2) {
+    const op = parts[i].toLowerCase();
+    const val = toNum(parts[i + 1]);
+    if (!Number.isFinite(val)) return null;
+    if (op === 'x' || op === 'х' || op === '×' || op === '*') nums[nums.length - 1] *= val;
+    else { ops.push(op); nums.push(val); }
+  }
+  let value = nums[0];
+  for (let i = 0; i < ops.length; i++) value = ops[i] === '-' ? value - nums[i + 1] : value + nums[i + 1];
+  if (!Number.isFinite(value) || value <= 0) return null;
+  value = Math.round(value * 100) / 100;
+  const pretty = String(text).replace(/\s+/g, '').replace(/[xх*]/gi, ' × ').replace(/\+/g, ' + ').replace(/-/g, ' − ') + ' = ' + value;
+  return { value, pretty };
+}
 
 function parseItem(raw) {
   let src = String(raw);
-  const num = (s) => parseFloat(String(s).replace(',', '.'));
+  const num = toNum;
 
   // Калорийность на 100 г вырезаем до общего разбора, иначе числа из неё уйдут в вес.
   let per100Kcal = null;
-  const per100 = src.match(PER100_RE);
+  const per100 = src.match(PER100_RE) || src.match(SHORT_PER100_RE);
   if (per100) {
     const base = num(per100[2]);
     if (base > 0) per100Kcal = num(per100[1]) * (100 / base);
     src = src.replace(per100[0], ' ');
   }
 
-  // Множитель: 38x5г → 190 г.
+  // Арифметика: 640-120г → 520 г, 38x5г → 190 г.
   let multNote = null;
-  const mult = src.match(MULT_RE);
-  if (mult) {
-    const a = num(mult[1]), b = num(mult[2]);
-    const res = Math.round(a * b * 100) / 100;
-    multNote = `${a} × ${b} = ${res}`;
-    src = src.replace(mult[0], String(res));
+  const expr = src.match(EXPR_RE);
+  if (expr) {
+    const res = evalExpr(expr[0]);
+    if (res) {
+      multNote = res.pretty;
+      src = src.replace(expr[0], String(res.value));
+    }
   }
 
   const text = norm(src);

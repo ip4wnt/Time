@@ -1,6 +1,6 @@
 // Экран «добавить»: несколько записей разных видов на выделенные часы (или дни — для задач).
 import { I, KIND_ICON, KIND_LABEL, MOOD_ICON } from '../icons.js';
-import { post, put, del, upload, fileUrl } from '../api.js';
+import { get, post, put, del, upload, fileUrl } from '../api.js';
 import {
   state, loadDay, loadMonth, ymOf, hoursLabel, hoursRange, humanDate, rangesLabel, activeActivities, activity, tag, esc, saveBatch,
   fmtSize, isLight, MOOD_COLOR, todayStr, invalidateEvents, MONTHS_SHORT, parseDate,
@@ -150,12 +150,85 @@ export async function renderAdd(q) {
     return ta;
   }
 
+  // Подсказки по ранее введённым продуктам. Смотрим на отрезок строки до курсора
+  // (после последнего перевода строки или запятой) и предлагаем прошлые записи.
+  function foodAutocomplete(ta) {
+    const list = h('<div class="food-ac-list" hidden></div>');
+    let items = [];
+    let active = -1;
+    let seq = 0;
+    let timer = null;
+
+    const segment = () => {
+      const upto = ta.value.slice(0, ta.selectionStart);
+      const start = Math.max(upto.lastIndexOf('\n'), upto.lastIndexOf(','), upto.lastIndexOf(';')) + 1;
+      return { start, text: upto.slice(start) };
+    };
+    const hide = () => { list.hidden = true; list.innerHTML = ''; items = []; active = -1; };
+    const draw = () => {
+      if (!items.length) { hide(); return; }
+      list.innerHTML = items.map((it, i) => `<button type="button" data-i="${i}" class="${i === active ? 'on' : ''}">${esc(it.line)}${it.n > 1 ? `<span class="n">${it.n}</span>` : ''}</button>`).join('');
+      list.hidden = false;
+    };
+    const pick = (i) => {
+      const it = items[i];
+      if (!it) return;
+      const seg = segment();
+      const before = ta.value.slice(0, seg.start);
+      const after = ta.value.slice(ta.selectionStart);
+      const pad = before && !/[\n\s]$/.test(before) ? ' ' : '';
+      const ins = before ? pad + it.line : it.line;
+      ta.value = before + ins + after;
+      const pos = before.length + ins.length;
+      ta.setSelectionRange(pos, pos);
+      // Значение подставлено кодом, поэтому событие input генерируем вручную —
+      // иначе en.text останется прежним.
+      ta.dispatchEvent(new Event('input'));
+      hide();
+      ta.focus();
+    };
+    const query = () => {
+      const q = segment().text.trim();
+      if (q.length < 2) { hide(); return; }
+      const my = ++seq;
+      get(`/api/food/suggest?q=${encodeURIComponent(q)}`).then((r) => {
+        if (my !== seq || document.activeElement !== ta) return;
+        const cur = segment().text.trim().toLowerCase();
+        items = (r.items || []).filter((it) => it.line.toLowerCase() !== cur);
+        active = -1;
+        draw();
+      }).catch(() => hide());
+    };
+
+    ta.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(query, 180); });
+    ta.addEventListener('keydown', (e) => {
+      if (list.hidden || !items.length) return;
+      if (e.key === 'Escape') { e.preventDefault(); hide(); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); active = (active + 1) % items.length; draw(); list.children[active].scrollIntoView({ block: 'nearest' }); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); active = (active - 1 + items.length) % items.length; draw(); list.children[active].scrollIntoView({ block: 'nearest' }); }
+      else if ((e.key === 'Enter' || e.key === 'Tab') && active >= 0) { e.preventDefault(); pick(active); }
+    });
+    ta.addEventListener('blur', () => setTimeout(hide, 150));
+    // mousedown, а не click: textarea не должна терять фокус до вставки
+    list.addEventListener('mousedown', (e) => {
+      const b = e.target.closest('button[data-i]');
+      if (!b) return;
+      e.preventDefault();
+      pick(Number(b.dataset.i));
+    });
+
+    const wrap = h('<div class="food-ac"></div>');
+    wrap.appendChild(ta);
+    wrap.appendChild(list);
+    return wrap;
+  }
+
   // ---- еда
   function foodBody(en, body) {
     body.innerHTML = '';
     const ta = textarea(en, 'например: овсянка 60 г, банан, кофе с молоком 200 мл', 'short');
     ta.style.marginTop = '0';
-    body.appendChild(ta);
+    body.appendChild(foodAutocomplete(ta));
     const row = h(`<div class="row" style="margin-top:1.2rem"><button class="btn small" data-act="calc">посчитать</button><span class="muted" style="font-size:1.5rem">продукты через запятую или с новой строки</span></div>`);
     body.appendChild(row);
     const res = h('<div></div>');
