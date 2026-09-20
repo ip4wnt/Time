@@ -44,6 +44,9 @@ mkdir -p "$DATA_DIR/uploads" "$ENV_DIR"
 chown -R chronum:chronum "$DATA_DIR"
 
 echo "== код"
+# Каталог принадлежит chronum, а скрипт идёт от root — без этого git ругается
+# на dubious ownership и установка падает.
+git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
 if [[ -d "$APP_DIR/.git" ]]; then
   git -C "$APP_DIR" fetch -q origin "$BRANCH" && git -C "$APP_DIR" checkout -q "$BRANCH" && git -C "$APP_DIR" pull -q
 else
