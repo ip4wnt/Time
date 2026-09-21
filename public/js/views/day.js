@@ -8,7 +8,7 @@ import { h, toast } from '../ui.js';
 import { put } from '../api.js';
 import {
   calHeader, dayPicker, filtersBar, activeFilters, cellRows, filterButton, sumLine, sumSep,
-  ROW_NEUTRAL, ROW_OVER, ROW_UNDER,
+  ROW_NEUTRAL,
 } from './common.js';
 
 export async function renderDay(day, query = {}) {
@@ -35,7 +35,6 @@ export async function renderDay(day, query = {}) {
   const tc = topCounter();
   const norm = kcalNorm();
   const imp = isImportant(day);
-  const dayTotal = (dayKcal(evs) || { kcal: 0 }).kcal;
 
   function draw() {
     page.innerHTML = '';
@@ -83,8 +82,8 @@ export async function renderDay(day, query = {}) {
     const foods = slot.all.filter((e) => e.kind === 'food');
     if (foods.length) {
       const kcal = Math.round(foods.reduce((s, e) => s + (e.kcal || 0), 0));
-      // цвет строки — по итогу дня относительно нормы
-      out.food = { html: `<b>${kcal}</b>${icon('apple')}`, style: dayTotal > norm ? ROW_OVER : ROW_UNDER };
+      // в представлении дня строка еды нейтральная, без цветовой оценки нормы
+      out.food = { html: `<b>${kcal}</b>${icon('apple')}`, style: ROW_NEUTRAL };
     }
     if (tc) {
       const cs = slot.all.filter((e) => e.kind === 'counter' && e.counter_id === tc.id);
