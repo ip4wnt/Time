@@ -60,7 +60,7 @@ export async function renderAdd(q) {
   page.appendChild(list);
   const bottom = h(`<div class="row"><button class="round" data-act="plus" aria-label="добавить запись">${I.plus}</button><span class="spacer"></span><button class="btn" data-act="save">сохранить</button></div><div class="kinds hidden"></div>`);
   page.appendChild(bottom);
-  const kindsRow = h(`<div class="kinds hidden">${['activity', 'food', 'task', 'thought', 'counter'].map((k) => `<button class="mode" data-kind="${k}" title="${KIND_LABEL[k]}">${I[KIND_ICON[k]]}</button>`).join('')}<button class="mode off" disabled title="деньги">${I.ruble}</button></div>`);
+  const kindsRow = h(`<div class="kinds hidden">${['activity', 'food', 'task', 'thought', 'counter'].map((k) => `<button class="fbtn" data-kind="${k}" title="${KIND_LABEL[k]}">${I[KIND_ICON[k]]}</button>`).join('')}<button class="fbtn off" disabled title="деньги">${I.ruble}</button></div>`);
   page.appendChild(kindsRow);
   bottom.querySelector('[data-act=plus]').onclick = () => kindsRow.classList.toggle('hidden');
   kindsRow.addEventListener('click', (e) => { const b = e.target.closest('[data-kind]'); if (!b) return; entries.push(blank(b.dataset.kind)); kindsRow.classList.add('hidden'); draw(); list.lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
