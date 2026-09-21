@@ -30,6 +30,9 @@ export async function renderDay(day, query = {}) {
   const [evs] = await Promise.all([loadDay(day), loadDates().catch(() => null)]);
   const hm = hourMap(evs);
   const tasks = evs.filter((e) => e.kind === 'task');
+  // задачи могут быть привязаны к часу — собираем их по часам для наложений
+  const taskHours = Array.from({ length: 24 }, () => []);
+  for (const t of tasks) for (const hr of t.hours || []) if (hr >= 0 && hr < 24) taskHours[hr].push(t);
   const isToday = day === todayStr();
   const nowHour = new Date().getHours();
   const tc = topCounter();
@@ -42,7 +45,7 @@ export async function renderDay(day, query = {}) {
     for (let hr = 0; hr < 24; hr++) {
       const slot = hm[hr];
       const bottom = `<span class="cell-num">${hr}</span>${imp && hr === 0 ? `<span class="cell-star">${I.star}</span>` : ''}`;
-      const { rows, html } = cellRows(overlays(slot), bottom);
+      const { rows, html } = cellRows(overlays(slot, hr), bottom);
       const cell = h(`<button class="cell ${isToday && hr === nowHour ? 'today' : ''} ${state.selection.has(hr) ? 'selected' : ''}" style="--rows:${rows}" data-hour="${hr}">${html}</button>`);
       const act = slot.all.find((e) => e.kind === 'activity');
       if (act && isSleepEvent(act)) cell.classList.add('sleep');
@@ -77,7 +80,7 @@ export async function renderDay(day, query = {}) {
   }
 
   // наложения на ячейку часа
-  function overlays(slot) {
+  function overlays(slot, hr) {
     const out = {};
     const foods = slot.all.filter((e) => e.kind === 'food');
     if (foods.length) {
@@ -91,7 +94,9 @@ export async function renderDay(day, query = {}) {
     }
     const th = slot.all.filter((e) => e.kind === 'thought').slice(0, 4);
     if (th.length) out.thought = { html: th.map((e) => `<span class="ri" style="color:${MOOD_COLOR[e.mood || 'neutral']}">${I[MOOD_ICON[e.mood || 'neutral']]}</span>`).join(''), style: ROW_NEUTRAL };
-    return out; // задачи привязаны к дню, а не к часу — строка остаётся пустой
+    const tk = taskHours[hr] || [];
+    if (tk.length) out.task = { html: `<b>${tk.length}</b>${icon('checkBox')}`, style: ROW_NEUTRAL };
+    return out; // задачи без часа остаются только в сводке дня
   }
   function icon(name) { return `<span class="ri">${I[name]}</span>`; }
 
@@ -185,7 +190,8 @@ export async function renderDay(day, query = {}) {
     page.appendChild(h(`<div class="sum-head"><span><b>${tasks.length}</b> запланировано</span><span><b>${done}</b> сделано</span></div><div class="progress"><i style="width:${tasks.length ? Math.round(done / tasks.length * 100) : 0}%"></i></div>`));
     const box = h('<div class="summary"></div>');
     for (const tk of [...tasks].sort((a, b) => (a.done - b.done) || (a.position - b.position))) {
-      const line = sumLine(tk.days.length > 1 ? `${tk.days.length} дн.` : '·', tk.text || '(без текста)', { done: tk.done, prefix: prefixFor({ kind: 'activity', activity_id: tk.activity_id }) });
+      const when = tk.days.length > 1 ? `${tk.days.length} дн.` : (tk.hours && tk.hours.length ? hoursLabel(tk.hours) : '·');
+      const line = sumLine(when, tk.text || '(без текста)', { done: tk.done, prefix: prefixFor({ kind: 'activity', activity_id: tk.activity_id }) });
       line.querySelector('.t').onclick = async (ev) => { ev.stopPropagation(); try { await put(`/api/events/${tk.id}`, { done: !tk.done }); invalidateEvents(); tk.done = !tk.done; draw(); } catch (e) { toast(e.message); } };
       line.querySelector('.k').onclick = () => openEvent(tk);
       box.appendChild(line);

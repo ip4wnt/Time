@@ -39,7 +39,8 @@ export async function renderAdd(q) {
     for (const e of dayEvents) if (e.kind !== 'task' && e.hours.some((x) => set.has(x))) entries.push(fromEvent(e));
   }
   const selHours = hours.length ? hours : (entries[0]?.hours || []);
-  const selDays = days.length ? days : (entries[0]?.days || [day]);
+  // у записей-не-задач поле days пустое, поэтому нужен именно непустой список
+  const selDays = days.length ? days : (entries[0]?.days?.length ? entries[0].days : [day]);
   // в режиме еды/мысли/счётчика сразу заводим новую запись этого вида (поверх уже существующих в этих часах)
   let focusNew = false;
   if (!entries.length || (!editId && kind !== 'activity' && kind !== 'task')) { entries.push(blank(kind)); focusNew = entries.length > 1; }
@@ -52,7 +53,8 @@ export async function renderAdd(q) {
   app.appendChild(header({ title: `${editId ? 'изменить' : 'добавить'} ${KIND_TITLE[editId ? entries[0].kind : kind] || ''}`, left: 'close', onLeft: () => { location.hash = back; }, search: false }));
   const page = h('<div class="page"></div>');
   app.appendChild(page);
-  const whenText = isTaskSel || entries[0].kind === 'task'
+  const taskWhole = (isTaskSel || entries[0].kind === 'task') && !(selDays.length === 1 && selHours.length);
+  const whenText = taskWhole
     ? daysLabel(selDays)
     : `${hoursRange(selHours)} <span class="muted">${humanDate(day)}</span>`;
   page.appendChild(h(`<div class="add-when">${whenText}</div>`));
@@ -74,7 +76,7 @@ export async function renderAdd(q) {
   function entryEl(en, i) {
     const el = h(`<section class="entry" data-i="${i}">
       <div class="entry-head">
-        <span class="kind">${I[KIND_ICON[en.kind]]} ${KIND_LABEL[en.kind]}${i === 0 && en.kind !== 'task' && entries.length > 1 ? ' · окрашивает ячейку' : ''} ${en.kind !== 'task' && en.hours.join() !== selHours.join() ? `<span class="entry-hours">${hoursRange(en.hours)}</span>` : ''}</span>
+        <span class="kind">${I[KIND_ICON[en.kind]]} ${KIND_LABEL[en.kind]}${i === 0 && en.kind !== 'task' && entries.length > 1 ? ' · окрашивает ячейку' : ''} ${en.hours.length && en.hours.join() !== selHours.join() ? `<span class="entry-hours">${hoursRange(en.hours)}</span>` : ''}</span>
         <span class="entry-tools">
           ${entries.length > 1 ? `<button data-act="up" ${i === 0 ? 'disabled' : ''} aria-label="выше">${I.up}</button><button data-act="down" ${i === entries.length - 1 ? 'disabled' : ''} aria-label="ниже">${I.down}</button>` : ''}
           <button data-act="attach" aria-label="прикрепить файл">${I.paperclip}</button>
@@ -322,7 +324,11 @@ export async function renderAdd(q) {
     const upsertEntries = [];
     entries.forEach((en, i) => {
       const base = { id: en.id || undefined, kind: en.kind, position: i, text: en.text, activity_id: en.activity_id, tag_id: en.tag_id, done: en.done };
-      if (en.kind === 'task') base.days = en.days.length ? en.days : selDays;
+      if (en.kind === 'task') {
+        base.days = en.days.length ? en.days : (selDays.length ? selDays : [day]);
+        // задачу, добавленную к конкретному часу, привязываем к этому часу
+        if (base.days.length === 1) base.hours = en.hours.length ? en.hours : selHours;
+      }
       else { base.day = en.day || day; base.hours = en.hours.length ? en.hours : selHours; }
       if (en.kind === 'thought') base.mood = en.mood;
       if (en.kind === 'food') Object.assign(base, { kcal: en.kcal, protein: en.protein, fat: en.fat, carbs: en.carbs, food_calc: en.food_calc });

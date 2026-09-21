@@ -179,7 +179,10 @@ function validateEvent(e) {
   if (e.kind === 'task') {
     const days = Array.isArray(e.days) ? e.days.filter(isDate) : [];
     if (!days.length) throw new HttpError(400, 'У задачи должны быть дни');
-    out.days = [...new Set(days)].sort(); out.day = out.days[0]; out.hours = null;
+    out.days = [...new Set(days)].sort(); out.day = out.days[0];
+    // задача может быть привязана к часам — если её добавили из конкретного часа одного дня
+    const th = Array.isArray(e.hours) ? e.hours.map((x) => int(x)).filter((x) => x >= 0 && x <= 23) : [];
+    out.hours = out.days.length === 1 && th.length ? [...new Set(th)].sort((a, b) => a - b) : null;
   } else {
     if (!isDate(e.day)) throw new HttpError(400, 'Нужен день');
     const hours = Array.isArray(e.hours) ? e.hours.map((h) => int(h)).filter((h) => h >= 0 && h <= 23) : [];
