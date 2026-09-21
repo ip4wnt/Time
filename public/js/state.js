@@ -3,6 +3,7 @@ import { get, post } from './api.js';
 
 export const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 export const MONTHS_FULL = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+export const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 export const WEEKDAYS = ['П', 'В', 'С', 'Ч', 'П', 'С', 'В'];
 export const MOOD_COLOR = { sad: '#476FAF', neutral: '#686868', happy: '#F2D96B' };
 export const KINDS = ['activity', 'food', 'task', 'money', 'thought', 'counter'];
@@ -14,8 +15,8 @@ export const state = {
   counters: [],
   events: new Map(), // 'YYYY-MM' → массив событий
   dates: null,       // важные даты (кэш)
-  mode: 'activities', // activities | food | tasks | thoughts
-  counterOn: false,
+  filters: new Set(), // наложения на календарь: food | counter | task | thought
+  home: 'month',      // домашнее представление: month | day
   sort: 'weight',     // weight | chrono
   hiddenKinds: new Set(),
   month: null,        // 'YYYY-MM'
@@ -45,6 +46,8 @@ export function monthGrid(ym) {
 }
 export function monthTitle(ym) { const [y, m] = ym.split('-').map(Number); return { mon: MONTHS_SHORT[m - 1], year: String(y).slice(2) }; }
 export function dayTitle(s) { const d = parseDate(s); return { dom: d.getDate(), mon: MONTHS_SHORT[d.getMonth()], year: String(d.getFullYear()).slice(2) }; }
+// «16 сентября» — для шапки представления «день»
+export function dayLabel(s) { const d = parseDate(s); return `${d.getDate()} ${MONTHS_GEN[d.getMonth()]}`; }
 export function humanDate(s) { const d = parseDate(s); return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`; }
 
 // "1,3-5,9" из массива чисел
@@ -89,6 +92,14 @@ export function withAlpha(hex, a) {
   const n = parseInt(hex.slice(1), 16);
   return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
 }
+// затемнённая пара к цвету занятия — для градиентных заливок из макета
+export function darken(hex, k = 0.5) {
+  const n = parseInt(String(hex).slice(1), 16);
+  const c = [n >> 16, (n >> 8) & 255, n & 255].map((v) => Math.round(v * k));
+  return `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+// градиент заливки: цвет занятия внизу слева, затемнённый — вверху справа
+export function grad(hex, deg = 45) { return `linear-gradient(${deg}deg, ${hex} 0%, ${darken(hex)} 100%)`; }
 
 // ---------- справочники ----------
 export function activity(id) { return state.activities.find((a) => a.id === Number(id)) || null; }
@@ -205,14 +216,14 @@ export async function saveBatch(upsert, del) {
 export function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem('chronum_prefs') || '{}');
-    if (p.mode) state.mode = p.mode;
     if (p.sort) state.sort = p.sort;
-    if (p.counterOn) state.counterOn = true;
+    if (p.home === 'day' || p.home === 'month') state.home = p.home;
+    if (Array.isArray(p.filters)) state.filters = new Set(p.filters);
     if (Array.isArray(p.hiddenKinds)) state.hiddenKinds = new Set(p.hiddenKinds);
   } catch { /* ignore */ }
 }
 export function savePrefs() {
-  try { localStorage.setItem('chronum_prefs', JSON.stringify({ mode: state.mode, sort: state.sort, counterOn: state.counterOn, hiddenKinds: [...state.hiddenKinds] })); } catch { /* ignore */ }
+  try { localStorage.setItem('chronum_prefs', JSON.stringify({ sort: state.sort, home: state.home, filters: [...state.filters], hiddenKinds: [...state.hiddenKinds] })); } catch { /* ignore */ }
 }
 
 // ---------- утилиты ----------

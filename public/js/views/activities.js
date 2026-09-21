@@ -1,7 +1,7 @@
 // Настройки: занятия — цвет, название, порядок, архив.
 import { I } from '../icons.js';
 import { post, put, del } from '../api.js';
-import { state, esc, invalidateEvents } from '../state.js';
+import { state, esc, invalidateEvents, savePrefs } from '../state.js';
 import { h, header, toast, dialog, confirm } from '../ui.js';
 
 export async function renderActivities() {
@@ -9,7 +9,18 @@ export async function renderActivities() {
   app.appendChild(header({ title: 'настройки', icon: 'gear' }));
   const page = h('<div class="page"></div>');
   app.appendChild(page);
-  page.appendChild(h('<h2 class="h" style="margin-top:0">занятия</h2>'));
+  // домашнее представление
+  page.appendChild(h('<h2 class="h" style="margin-top:0">домашнее представление</h2>'));
+  page.appendChild(h('<p class="p">куда ведёт иконка дома в шапке календаря</p>'));
+  const homeSeg = h(`<div class="seg"><button data-home="month" class="${state.home === 'month' ? 'on' : ''}">месяц</button><button data-home="day" class="${state.home === 'day' ? 'on' : ''}">день</button></div>`);
+  homeSeg.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-home]'); if (!b) return;
+    state.home = b.dataset.home; savePrefs();
+    homeSeg.querySelectorAll('[data-home]').forEach((x) => x.classList.toggle('on', x === b));
+  });
+  page.appendChild(homeSeg);
+
+  page.appendChild(h('<h2 class="h">занятия</h2>'));
   page.appendChild(h('<p class="p">цвет меняется прямо в кружке. Занятие с записями при удалении уходит в архив — его записи и цвет сохраняются</p>'));
   const list = h('<div class="list"></div>');
   page.appendChild(list);

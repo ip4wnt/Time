@@ -70,8 +70,8 @@ function openMenu() {
     </div>
     <div class="menu-block">
       <a class="mi" href="#/notes">заметки ${I.book}</a>
-      <a class="mi" href="#/month?mode=food">еда ${I.apple}</a>
-      <a class="mi" href="#/month?mode=tasks">задачи ${I.list}</a>
+      <a class="mi" href="#/month?filter=food">еда ${I.apple}</a>
+      <a class="mi" href="#/month?filter=task">задачи ${I.list}</a>
       <span class="mi off">деньги ${I.ruble}</span>
       <a class="mi" href="#/counters">счетчики ${I.timer}</a>
       <a class="mi" href="#/dates">важные даты ${I.star}</a>

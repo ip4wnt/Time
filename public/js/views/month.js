@@ -1,22 +1,31 @@
-// Экран «месяц»: сетка 7×6, навигация, режимы, саммари, инфографика.
+// Экран «месяц»: сетка 7×6, крошки-навигация, фильтры-наложения, блочная сводка, инфографика.
 import { I, KIND_ICON, MOOD_ICON } from '../icons.js';
 import {
-  state, monthGrid, monthTitle, addMonths, todayStr, ymOf, loadMonth, loadDates, eventsOfDay, hourMap,
-  dominantActivity, dominantMood, dayKcal, foodHeat, dayCounterValue, topCounter, isImportant, isSleepEvent,
-  activity, tag, esc, rangesLabel, MOOD_COLOR, WEEKDAYS, isLight, invalidateEvents, kcalNorm,
+  state, monthGrid, todayStr, ymOf, loadMonth, loadDates, eventsOfDay, hourMap,
+  dominantActivity, dayKcal, dayCounterValue, topCounter, isImportant, isSleepEvent,
+  activity, tag, counter, esc, rangesLabel, MOOD_COLOR, MONTHS_FULL, WEEKDAYS, invalidateEvents, kcalNorm, grad,
 } from '../state.js';
-import { h, header, toast } from '../ui.js';
+import { h, toast } from '../ui.js';
 import { put } from '../api.js';
-import { modesBar, calNav, filterButton, sumLine } from './common.js';
+import {
+  calHeader, monthPicker, filtersBar, activeFilters, cellRows, filterButton, sumLine, sumSep,
+  ROW_NEUTRAL, ROW_OVER, ROW_UNDER,
+} from './common.js';
 
 export async function renderMonth(ym, query = {}) {
   if (!/^\d{4}-\d{2}$/.test(ym)) ym = ymOf(todayStr());
-  if (query.mode) state.mode = query.mode;
+  if (query.filter) state.filters.add(query.filter);
   state.month = ym;
-  state.selection = new Set();
   const app = document.getElementById('app');
-  app.appendChild(header({ title: 'месяц', icon: 'calendar' }));
-  const page = h('<div class="page"></div>');
+  document.body.classList.add('bg-month');
+  const [y, m] = ym.split('-').map(Number);
+  app.appendChild(calHeader({
+    swapIcon: 'calendar',
+    swapTo: () => `#/day/${state.day && ymOf(state.day) === ym ? state.day : (ymOf(todayStr()) === ym ? todayStr() : `${ym}-01`)}`,
+    title: `${MONTHS_FULL[m - 1][0].toUpperCase()}${MONTHS_FULL[m - 1].slice(1)} ${y}`,
+    onTitle: () => monthPicker(ym, (val) => { location.hash = `#/month/${val}`; }),
+  }));
+  const page = h('<div class="page cal"></div>');
   app.appendChild(page);
 
   const [events] = await Promise.all([loadMonth(ym), loadDates().catch(() => null)]);
@@ -24,107 +33,50 @@ export async function renderMonth(ym, query = {}) {
   const perDay = new Map(grid.map((g) => [g.date, eventsOfDay(events, g.date)]));
   const today = todayStr();
   const tc = topCounter();
+  const norm = kcalNorm();
 
   function draw() {
     page.innerHTML = '';
-    // --- дни недели + сетка
     page.appendChild(h(`<div class="weekdays">${WEEKDAYS.map((w) => `<span>${w}</span>`).join('')}</div>`));
     const g = h('<div class="grid grid-month"></div>');
-    for (const cellInfo of grid) {
-      const evs = perDay.get(cellInfo.date);
-      const cell = h(`<button class="cell ${cellInfo.inMonth ? '' : 'out'} ${cellInfo.date === today ? 'today' : ''}" data-day="${cellInfo.date}"><span class="cell-num">${cellInfo.dom}</span></button>`);
-      let color = null;
-      if (state.mode === 'activities') {
-        const a = dominantActivity(evs); if (a) color = a.color;
-        if (state.counterOn && tc) { const v = dayCounterValue(evs, tc.id); if (v !== null) cell.appendChild(h(`<span class="cell-counter">${v}${I.timer}</span>`)); }
-      } else if (state.mode === 'food') {
-        const k = dayKcal(evs); if (k) color = foodHeat(k.kcal);
-      } else if (state.mode === 'tasks') {
-        const tasks = evs.filter((e) => e.kind === 'task');
-        if (tasks.length) {
-          const t = tasks.find((x) => !x.done) || tasks[0];
-          const a = t.activity_id ? activity(t.activity_id) : null;
-          color = a ? a.color : '#DEDEDE';
-          if (tasks.every((x) => x.done)) cell.appendChild(h(`<span class="cell-mark">${I.check}</span>`));
-          if (tasks.length > 1) cell.appendChild(h(`<span class="cell-more">+${tasks.length - 1}</span>`));
-        }
-        if (state.selection.has(cellInfo.date)) cell.classList.add('selected');
-      } else if (state.mode === 'thoughts') {
-        const m = dominantMood(evs); if (m) color = MOOD_COLOR[m];
-      }
-      if (color) { cell.style.background = color; cell.classList.add('colored'); if (isLight(color)) cell.style.color = '#000'; }
-      const imp = isImportant(cellInfo.date);
-      if (imp) cell.appendChild(h(`<span class="cell-star" title="${esc(imp.title)}">${I.starFill}</span>`));
-      cell.onclick = () => onCell(cellInfo.date);
+    for (const info of grid) {
+      const evs = perDay.get(info.date);
+      const imp = isImportant(info.date);
+      const bottom = `<span class="cell-num">${info.dom}</span>${imp ? `<span class="cell-star" title="${esc(imp.title)}">${I.star}</span>` : ''}`;
+      const { rows, html } = cellRows(overlays(evs), bottom);
+      const cell = h(`<button class="cell ${info.inMonth ? '' : 'out'} ${info.date === today ? 'today' : ''}" style="--rows:${rows}" data-day="${info.date}">${html}</button>`);
+      const a = dominantActivity(evs);
+      if (a) { cell.style.background = grad(a.color); cell.classList.add('colored'); }
+      cell.onclick = () => { state.day = info.date; location.hash = `#/day/${info.date}`; };
       g.appendChild(cell);
     }
     page.appendChild(g);
+    page.appendChild(filtersBar(() => draw()));
 
-    // --- навигация
-    const t = monthTitle(ym);
-    page.appendChild(calNav({
-      title: `<b>${t.mon}</b><span>${t.year}</span>`,
-      up: () => {}, upDisabled: true,
-      prev: () => { location.hash = `#/month/${addMonths(ym, -1)}`; },
-      next: () => { location.hash = `#/month/${addMonths(ym, 1)}`; },
-      down: () => { const d = state.day && ymOf(state.day) === ym ? state.day : (ymOf(today) === ym ? today : `${ym}-01`); location.hash = `#/day/${d}`; },
-    }));
-    page.appendChild(modesBar(() => { state.selection.clear(); draw(); }));
-
-    // --- саммари по режиму
-    if (state.mode === 'activities') drawActivitySummary();
-    else if (state.mode === 'food') drawFoodSummary();
-    else if (state.mode === 'tasks') drawTasksSummary();
-    else if (state.mode === 'thoughts') drawThoughtsSummary();
-
-    // --- нижняя панель выбора (режим задач)
-    document.querySelectorAll('.selbar').forEach((b) => b.remove());
-    if (state.mode === 'tasks' && state.selection.size) {
-      const bar = h('<div class="selbar"></div>');
-
-      // задачи выделенных дней — чтобы открыть уже созданную, а не только добавить новую
-      const picked = [];
-      const seenIds = new Set();
-      for (const day of [...state.selection].sort()) {
-        for (const e of perDay.get(day) || []) {
-          if (e.kind !== 'task' || seenIds.has(e.id)) continue;
-          seenIds.add(e.id); picked.push(e);
-        }
-      }
-      if (picked.length) {
-        bar.classList.add('with-list');
-        const list = h('<div class="selbar-list"></div>');
-        picked.sort((a, b) => (a.done - b.done) || (a.days[0] < b.days[0] ? -1 : 1) || (a.position - b.position));
-        for (const t of picked) {
-          const a = t.activity_id ? activity(t.activity_id) : null;
-          const days = rangesLabel(t.days.filter((d) => d.startsWith(ym)).map((d) => Number(d.slice(8))));
-          const line = sumLine(days, t.text || '(без текста)', {
-            done: t.done, files: (t.files || []).length,
-            prefix: a ? `<i class="mood-dot" style="background:${a.color}"></i>` : '',
-            onClick: () => openEvent(t, `#/month/${ym}?mode=tasks`),
-          });
-          list.appendChild(line);
-        }
-        bar.appendChild(list);
-      }
-
-      const btns = h(`<div class="selbar-btns"><button class="btn ghost" data-act="cancel">отменить</button><button class="btn" data-act="add">${picked.length ? 'новая задача' : 'добавить'}</button></div>`);
-      btns.querySelector('[data-act=cancel]').onclick = () => { state.selection.clear(); draw(); };
-      btns.querySelector('[data-act=add]').onclick = () => { location.hash = `#/add?days=${[...state.selection].sort().join(',')}&kind=task&back=${encodeURIComponent(`#/month/${ym}?mode=tasks`)}`; };
-      bar.appendChild(btns);
-      document.body.appendChild(bar);
+    drawActivitySummary();
+    for (const f of activeFilters()) {
+      page.appendChild(sumSep());
+      if (f === 'food') drawFoodSummary();
+      else if (f === 'counter') drawCounterSummary();
+      else if (f === 'task') drawTasksSummary();
+      else if (f === 'thought') drawThoughtsSummary();
     }
+    drawInfographic();
   }
 
-  function onCell(day) {
-    if (state.mode === 'tasks') {
-      if (state.selection.has(day)) state.selection.delete(day); else state.selection.add(day);
-      draw();
-      return;
-    }
-    state.day = day;
-    location.hash = `#/day/${day}`;
+  // наложения на ячейку дня
+  function overlays(evs) {
+    const out = {};
+    const k = dayKcal(evs);
+    if (k) out.food = { html: `<b>${k.kcal}</b>${icon('apple')}`, style: k.kcal > norm ? ROW_OVER : ROW_UNDER };
+    if (tc) { const v = dayCounterValue(evs, tc.id); if (v !== null) out.counter = { html: `<b>${v}</b>${icon('timer')}`, style: ROW_NEUTRAL }; }
+    const tasks = evs.filter((e) => e.kind === 'task');
+    if (tasks.length) out.task = { html: `<b>${tasks.length}</b>${icon('checkBox')}`, style: ROW_NEUTRAL };
+    const th = evs.filter((e) => e.kind === 'thought').slice(0, 4);
+    if (th.length) out.thought = { html: th.map((e) => `<span class="ri" style="color:${MOOD_COLOR[e.mood || 'neutral']}">${I[MOOD_ICON[e.mood || 'neutral']]}</span>`).join(''), style: ROW_NEUTRAL };
+    return out;
   }
+  function icon(name) { return `<span class="ri">${I[name]}</span>`; }
 
   // события ≥3 часов подряд, сгруппированные по занятие+тег+текст → дни
   function drawActivitySummary() {
@@ -146,9 +98,8 @@ export async function renderMonth(ym, query = {}) {
       const text = (gr.e.text || '').trim() || [a && a.name, tg && tg.name].filter(Boolean).join(' · ');
       box.appendChild(sumLine(rangesLabel(gr.days), text, { files: gr.files, onClick: () => openEvent(gr.e) }));
     }
-    if (!list.length) box.appendChild(h(`<p class="p">в этом месяце пока нет занятий от трёх часов подряд</p>`));
+    if (!list.length) box.appendChild(h('<p class="p">в этом месяце пока нет занятий от трёх часов подряд</p>'));
     page.appendChild(box);
-    drawInfographic();
   }
 
   function drawInfographic() {
@@ -156,7 +107,6 @@ export async function renderMonth(ym, query = {}) {
     bar.appendChild(filterButton(() => draw()));
     bar.appendChild(h(`<span class="muted" style="font-size:1.5rem">${state.sort === 'weight' ? 'по весу' : 'по времени'}${state.hiddenKinds.size ? ` · скрыто: ${state.hiddenKinds.size}` : ''}</span>`));
     page.appendChild(bar);
-    // собираем все отметки месяца
     const items = [];
     for (const g of grid) {
       if (!g.inMonth) continue;
@@ -181,7 +131,7 @@ export async function renderMonth(ym, query = {}) {
     }
     const dots = h('<div class="dots"></div>');
     for (const it of ordered) {
-      if (it.kind === 'activity') dots.appendChild(h(`<i style="background:${it.color}"></i>`));
+      if (it.kind === 'activity') dots.appendChild(h(`<i style="background:${grad(it.color, 135)}"></i>`));
       else if (it.kind === 'task') dots.appendChild(h(`<span class="dk" style="color:${it.color || '#fff'}">${it.done ? I.check : I.list}</span>`));
       else if (it.kind === 'thought') dots.appendChild(h(`<span class="dk" style="color:${MOOD_COLOR[it.mood || 'neutral']}">${I[MOOD_ICON[it.mood || 'neutral']]}</span>`));
       else dots.appendChild(h(`<span class="dk">${I[KIND_ICON[it.kind]]}</span>`));
@@ -196,12 +146,27 @@ export async function renderMonth(ym, query = {}) {
     for (const g of grid) {
       if (!g.inMonth) continue;
       const k = dayKcal(perDay.get(g.date)); if (!k) continue; any = true;
-      const diff = Math.round(k.kcal - kcalNorm());
+      const diff = Math.round(k.kcal - norm);
       const line = h(`<button class="food-line"><span class="k">${g.dom}</span><span><span class="kcal"><b>${k.kcal}</b> ккал <small>${diff >= 0 ? '+' : ''}${diff} к норме</small></span> <span class="macro">Б ${k.protein} · Ж ${k.fat} · У ${k.carbs}</span></span></button>`);
       line.onclick = () => { const e = perDay.get(g.date).find((x) => x.kind === 'food'); if (e) openEvent(e); };
       box.appendChild(line);
     }
     if (!any) box.appendChild(h('<p class="p">записей о еде в этом месяце нет</p>'));
+    page.appendChild(box);
+  }
+
+  function drawCounterSummary() {
+    const box = h('<div class="summary"></div>');
+    const sums = new Map();
+    for (const g of grid) {
+      if (!g.inMonth) continue;
+      for (const e of perDay.get(g.date)) if (e.kind === 'counter' && e.counter_id) sums.set(e.counter_id, (sums.get(e.counter_id) || 0) + (e.counter_value || 0));
+    }
+    for (const [id, sum] of sums) {
+      const c = counter(id);
+      box.appendChild(sumLine(c ? c.name : 'счётчик', `${Math.round(sum * 100) / 100}${c && c.unit ? ` ${c.unit}` : ''} в этом месяце`));
+    }
+    if (!sums.size) box.appendChild(h('<p class="p">записей счётчиков в этом месяце нет</p>'));
     page.appendChild(box);
   }
 
@@ -219,13 +184,13 @@ export async function renderMonth(ym, query = {}) {
       const line = sumLine(days, t.text || '(без текста)', { done: t.done, files: (t.files || []).length, prefix: a ? `<i class="mood-dot" style="background:${a.color}"></i>` : '' });
       line.querySelector('.t').onclick = async (ev) => {
         ev.stopPropagation();
-        try { await put(`/api/events/${t.id}`, { done: !t.done }); invalidateEvents(); t.done = !t.done; for (const [, list] of perDay) { const x = list.find((y) => y.id === t.id); if (x) x.done = t.done; } draw(); }
+        try { await put(`/api/events/${t.id}`, { done: !t.done }); invalidateEvents(); t.done = !t.done; for (const [, list] of perDay) { const x = list.find((y2) => y2.id === t.id); if (x) x.done = t.done; } draw(); }
         catch (e) { toast(e.message); }
       };
       line.querySelector('.k').onclick = () => openEvent(t);
       box.appendChild(line);
     }
-    if (!tasks.length) box.appendChild(h('<p class="p">задач на этот месяц нет — выделите дни и нажмите «добавить»</p>'));
+    if (!tasks.length) box.appendChild(h('<p class="p">задач на этот месяц нет</p>'));
     page.appendChild(box);
   }
 
@@ -250,7 +215,7 @@ export async function renderMonth(ym, query = {}) {
   }
 
   draw();
-  return () => { document.querySelectorAll('.selbar').forEach((b) => b.remove()); };
+  return () => { document.body.classList.remove('bg-month'); };
 }
 
 function hasRun(hours, n) {

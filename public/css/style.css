@@ -39,6 +39,9 @@ body::before {
   background: url('../img/halftone.jpg') center top / 60.3rem auto repeat;
   opacity: .55;
 }
+/* фоны календарных экранов — градиенты вместо картинки */
+body.bg-month::before { background: linear-gradient(180deg, #0C2414 0%, #2C4F18 45.9%, #000000 100%); opacity: .5; }
+body.bg-day::before { background: linear-gradient(180deg, #1D1640 0%, #6048C3 45.9%, #000000 100%); opacity: .5; }
 .app { position: relative; z-index: 1; max-width: 60.3rem; margin: 0 auto; min-height: 100vh; padding-bottom: 12rem; }
 #overlay { position: relative; z-index: 50; }
 
@@ -65,26 +68,58 @@ svg { display: block; }
 .hdr .hdr-title svg { width: 2.6rem; height: 2.6rem; flex: none; }
 
 .page { padding: 0 2.5rem; }
+.page.cal { padding: 0 1.82rem; }
+
+/* ---------- шапка-крошки календаря ---------- */
+.hdr.cal { position: relative; height: 6.4rem; padding: 0 1.82rem; gap: 1.6rem; }
+.hdr.cal .hdr-btn:first-child { margin-right: auto; }
+.hdr.cal .hdr-btn:last-child { margin-left: auto; }
+.hdr.cal .crumb { width: 2.8rem; height: 2.8rem; display: grid; place-items: center; color: var(--num); flex: none; }
+.hdr.cal .crumb svg { width: 2.8rem; height: 2.8rem; }
+.hdr.cal .crumb-sep { color: var(--text); font-size: 2.5rem; line-height: 1; }
+.hdr.cal .cal-title { display: flex; align-items: center; gap: 1.2rem; font-size: 2.5rem; color: var(--text); white-space: nowrap; }
+.hdr.cal .cal-title .chev { width: 1rem; height: .5rem; color: var(--text); }
+.hdr.cal .cal-title .chev svg { width: 100%; height: 100%; }
+.hdr.cal .popover { left: 50%; transform: translateX(-50%); top: 6rem; }
+.picker { min-width: 34rem; gap: 1.4rem; }
+.pick-head { display: flex; align-items: center; justify-content: space-between; font-size: 2rem; color: var(--num); }
+.pick-nav { width: 4rem; height: 4rem; display: grid; place-items: center; color: var(--num); background: var(--cell); }
+.pick-nav svg { width: 2.2rem; height: 2.2rem; }
+.pick-months { display: grid; grid-template-columns: repeat(4, 1fr); gap: .6rem; }
+.pick-months button { height: 4.4rem; background: var(--cell); color: var(--text); font-size: 1.7rem; }
+.pick-months button.on { color: #000; background: var(--num); }
+.pick-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: .4rem; color: var(--muted); font-size: 1.5rem; text-align: center; }
+.pick-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: .4rem; }
+.pick-days button { height: 4rem; background: var(--cell); color: var(--text); font-size: 1.6rem; }
+.pick-days button.dim { color: var(--muted); opacity: .5; }
+.pick-days button.on { color: #000; background: var(--num); }
 .section-gap { height: 3rem; }
 
 /* ---------- сетки календаря ---------- */
-.weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: .5rem; color: var(--muted); font-size: 1.8rem; text-align: center; margin: .2rem 0 .8rem; }
-.grid { display: grid; gap: .5rem; }
-.grid-month { grid-template-columns: repeat(7, 1fr); }
-.grid-day { grid-template-columns: repeat(6, 1fr); gap: .6rem; }
+.weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: .2rem; color: var(--muted); font-size: 1.8rem; text-align: center; margin: 0 0 .8rem; }
+.grid { display: grid; gap: .2rem; }
+.grid-month { grid-template-columns: repeat(7, 1fr); --rowh: 2.66rem; }
+.grid-day { grid-template-columns: repeat(6, 1fr); gap: .19rem .21rem; --rowh: 3.09rem; }
 .cell {
-  position: relative; aspect-ratio: 1 / 1; background: var(--cell); border-radius: 0;
+  position: relative; background: var(--cell); border-radius: 0;
   color: var(--num); user-select: none; cursor: pointer; transition: transform .08s;
   border: .2rem solid transparent;
+  display: grid; grid-template-rows: repeat(var(--rows, 3), 1fr);
+  height: calc(var(--rows, 3) * var(--rowh, 2.66rem));
+  overflow: hidden;
 }
 .cell:active { transform: scale(.96); }
-.cell.out { background: rgba(0,0,0,.5); }
-.cell.out .cell-num { opacity: .4; }
-.cell.out.colored { opacity: .5; }
-.cell.today { border-color: var(--accent); }
+.cell.out { opacity: .2; }
+.cell.sleep { background: rgba(39,39,39,.5); }
+.cell.today { border-color: #81FF96; }
 .cell.selected { border-color: var(--num); box-shadow: inset 0 0 0 .2rem var(--bg); }
-.cell-num { position: absolute; left: .7rem; bottom: .3rem; font-size: 1.8rem; line-height: 1; }
-.cell-star { position: absolute; right: .6rem; bottom: .5rem; width: 1.9rem; height: 1.9rem; color: var(--num); }
+.cell .frow { display: flex; align-items: center; justify-content: flex-end; gap: .4rem; padding: 0 .5rem; min-width: 0; overflow: hidden; font-size: 1.8rem; line-height: 1; color: var(--num); }
+.cell .frow b { font-weight: 400; }
+.cell .frow .ri { width: 1.7rem; height: 1.7rem; flex: none; }
+.cell .frow .ri svg { width: 100%; height: 100%; }
+.cell .frow.last { justify-content: space-between; align-items: flex-end; padding: 0 .6rem .3rem .7rem; }
+.cell-num { font-size: 1.8rem; line-height: 1; color: rgba(255,255,255,.4); }
+.cell-star { width: 1.9rem; height: 1.9rem; color: var(--num); flex: none; }
 .cell-star svg { width: 100%; height: 100%; }
 .cell-more { position: absolute; right: .4rem; top: .4rem; background: var(--num); color: #000; font-size: 1.5rem; line-height: 1; padding: .2rem .5rem; border-radius: 1rem; }
 .cell-counter { position: absolute; right: .4rem; top: .4rem; display: flex; align-items: center; gap: .3rem; font-size: 1.5rem; line-height: 1; background: var(--num); color: #000; padding: .2rem .5rem; border-radius: 1rem; }
@@ -106,17 +141,16 @@ svg { display: block; }
 .calnav .nav-title span { font-size: 3.4rem; color: var(--muted); line-height: 1; }
 .calnav .nav-title.day-title b { font-size: 4.1rem; }
 
-/* ---------- переключатели режимов ---------- */
-.modes { display: flex; justify-content: space-between; margin-top: 3.4rem; }
-.mode {
-  width: 6.4rem; height: 6.4rem; border-radius: 50%; background: var(--cell);
-  border: .15rem solid var(--stroke); display: grid; place-items: center; color: var(--text);
-}
-.mode svg { width: 3.4rem; height: 3.4rem; }
-.mode.on { border-color: #8a8a8a; color: var(--num); }
-.mode.off { opacity: .35; }
-.mode.dim { color: var(--muted); }
+/* ---------- фильтры-наложения ---------- */
+.filters { display: flex; justify-content: space-between; margin-top: 3.4rem; }
+.fbtn { width: 6.4rem; height: 6.4rem; border-radius: 50%; display: grid; place-items: center; color: var(--num); }
+.fbtn svg { width: 3.4rem; height: 3.4rem; }
+.fbtn.on { background: var(--num); color: #0E0E0E; }
+.fbtn.off { opacity: .35; }
 .palette-dots { width: 3.4rem; height: 3.4rem; }
+.seg { display: flex; gap: .6rem; }
+.seg button { flex: 1; height: 4.4rem; background: var(--cell); color: var(--muted); font-size: 1.6rem; }
+.seg button.on { color: var(--num); outline: .15rem solid #8a8a8a; }
 
 /* ---------- саммари ---------- */
 .summary { margin-top: 3rem; display: flex; flex-direction: column; gap: 1.2rem; }
@@ -131,6 +165,7 @@ svg { display: block; }
 .progress { height: .6rem; background: var(--panel); margin-top: 1rem; }
 .progress i { display: block; height: 100%; background: var(--accent); }
 .hr { height: .1rem; background: var(--text); opacity: .7; margin: 2rem 0; }
+.sum-sep { height: .1rem; background: var(--text); opacity: .35; margin: 2.6rem 0 0; }
 .food-line { display: grid; grid-template-columns: 3.4rem 1fr; gap: 1rem; align-items: baseline; text-align: left; }
 .food-line .k { color: var(--muted); }
 .food-line .kcal b { color: var(--num); font-weight: 400; }
@@ -143,14 +178,14 @@ svg { display: block; }
 .sq-btn { width: 5.4rem; height: 5.4rem; background: var(--cell); display: grid; place-items: center; color: var(--num); }
 .sq-btn svg { width: 2.8rem; height: 2.8rem; }
 .sq-btn.on { outline: .15rem solid #8a8a8a; }
-.dots { margin-top: 2rem; display: grid; grid-template-columns: repeat(24, 1fr); gap: .6rem .64rem; }
-.dots i { width: 1.7rem; height: 1.7rem; border-radius: 50%; display: block; }
+.dots { margin-top: 2rem; display: grid; grid-template-columns: repeat(24, 1fr); gap: .3rem; }
+.dots i { width: 100%; aspect-ratio: 1; border-radius: 0; display: block; }
 .dots .dk { width: 1.7rem; height: 1.7rem; color: var(--num); }
 .dots .dk svg { width: 100%; height: 100%; }
 .daygraph { margin-top: 3rem; display: grid; grid-template-columns: repeat(24, 1fr); gap: 0 .64rem; align-items: end; position: relative; }
 .daygraph .col { display: flex; flex-direction: column-reverse; align-items: center; gap: .6rem; position: relative; }
 .daygraph .col.sep::before { content: ''; position: absolute; left: -0.4rem; top: -1rem; bottom: 0; width: .1rem; background: #555; }
-.daygraph .col i { width: 1.7rem; height: 1.7rem; border-radius: 50%; display: block; }
+.daygraph .col i { width: 100%; aspect-ratio: 1; border-radius: 0; display: block; }
 .daygraph .col .dk { width: 1.7rem; height: 1.7rem; color: var(--num); }
 .daygraph .col .dk svg { width: 100%; height: 100%; }
 .daygraph .col .more { font-size: 1.4rem; color: var(--num); line-height: 1; }
@@ -183,6 +218,7 @@ svg { display: block; }
 .btn.ghost { background: var(--cell); }
 .btn.danger { color: #ff8a80; }
 .btn.accent { color: var(--accent); }
+.btn.wide { width: 100%; margin-top: 1.6rem; }
 .round { width: 6.4rem; height: 6.4rem; border-radius: 50%; background: var(--cell); border: .15rem solid #8a8a8a; display: grid; place-items: center; color: var(--num); }
 .round svg { width: 3.2rem; height: 3.2rem; }
 .round.small { width: 4.8rem; height: 4.8rem; }
