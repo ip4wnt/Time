@@ -23,7 +23,7 @@ async function main() {
   const { events, colors, stats } = parseLegacy(data);
   const created = [];
 
-  await db.tx(async (c) => {
+  await db.txAdmin(async (c) => {   // импорт идёт в обход RLS: контекста пользователя в скрипте нет
     const acts = await c.query('SELECT id, name FROM activities WHERE user_id=$1', [userId]);
     const byName = new Map(acts.rows.map((a) => [a.name.toLowerCase(), a.id]));
     const actId = {};

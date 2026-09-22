@@ -5,6 +5,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const db = require('./db');
+// Обработчик уже выполняется внутри транзакции пользователя (db.withUser),
+// поэтому «вложенная» транзакция не нужна — оставляем прежнюю форму вызова.
+const tx = (q, fn) => fn(q);
 const auth = require('./auth');
 const food = require('./food');
 const config = require('./config');
@@ -26,128 +29,131 @@ function sessionCookie(token, expires) {
 function clearCookie() { return cookieHeader(COOKIE, '', { maxAge: 0, secure: config.secureCookies }); }
 
 // ---------------- auth ----------------
-router.add('POST', '/api/auth/login', async ({ body, req, res }) => {
+router.add('POST', '/api/auth/login', async ({ q, body, req, res }) => {
   const r = await auth.login(body.login, body.password, req);
   res.setHeader('Set-Cookie', sessionCookie(r.token, r.expires));
   return { ok: true, status: 'ok', token: r.token };
 }, { public: true });
-router.add('POST', '/api/auth/register', async ({ body, req, res }) => {
+router.add('POST', '/api/auth/register', async ({ q, body, req, res }) => {
   const r = await auth.register(body.login, body.password, req);
   res.setHeader('Set-Cookie', sessionCookie(r.token, r.expires));
   return { ok: true, status: 'ok', token: r.token };
 }, { public: true });
-router.add('POST', '/api/auth/logout', async ({ req, res }) => {
+router.add('POST', '/api/auth/logout', async ({ q, req, res }) => {
   await auth.destroySession(req.sessionToken);
   res.setHeader('Set-Cookie', clearCookie());
   return { ok: true };
 }, { public: true });
 
-router.add('GET', '/api/me', async ({ user }) => {
-  const s = await db.query('SELECT created_at, last_seen, ip, user_agent FROM sessions WHERE user_id=$1 ORDER BY last_seen DESC LIMIT 10', [user.id]);
-  const a = await db.query('SELECT ip, ok, created_at FROM login_attempts WHERE login_norm=$1 ORDER BY created_at DESC LIMIT 10', [auth.normalizeLogin(user.login)]);
+router.add('GET', '/api/me', async ({ q, user }) => {
+  const s = await q.query('SELECT created_at, last_seen, ip, user_agent FROM sessions WHERE user_id=$1 ORDER BY last_seen DESC LIMIT 10', [user.id]);
+  const a = await q.query('SELECT ip, ok, created_at FROM login_attempts WHERE login_norm=$1 ORDER BY created_at DESC LIMIT 10', [auth.normalizeLogin(user.login)]);
   return { user: { id: user.id, login: user.login, created_at: user.created_at, settings: user.settings }, sessions: s.rows, attempts: a.rows };
 });
-router.add('PUT', '/api/me/password', async ({ user, body }) => { await auth.changePassword(user.id, body.current, body.next); return { ok: true }; });
-router.add('PUT', '/api/me/settings', async ({ user, body }) => {
+router.add('PUT', '/api/me/password', async ({ q, user, body }) => { await auth.changePassword(user.id, body.current, body.next); return { ok: true }; });
+router.add('PUT', '/api/me/settings', async ({ q, user, body }) => {
   const settings = body.settings && typeof body.settings === 'object' ? body.settings : {};
-  await db.query('UPDATE users SET settings = settings || $2::jsonb WHERE id=$1', [user.id, JSON.stringify(settings)]);
+  await q.query('UPDATE users SET settings = settings || $2::jsonb WHERE id=$1', [user.id, JSON.stringify(settings)]);
   return { ok: true };
 });
-router.add('POST', '/api/me/delete', async ({ user, res }) => {
+router.add('POST', '/api/me/delete', async ({ q, user, res }) => {
   const r = await auth.requestDeletion(user.id);
   res.setHeader('Set-Cookie', clearCookie());
   return { ok: true, days: r.days };
 });
-router.add('POST', '/api/me/logout-all', async ({ user, res }) => {
-  await db.query('DELETE FROM sessions WHERE user_id=$1', [user.id]);
+router.add('POST', '/api/me/logout-all', async ({ q, user, res }) => {
+  await q.query('DELETE FROM sessions WHERE user_id=$1', [user.id]);
   res.setHeader('Set-Cookie', clearCookie());
   return { ok: true };
 });
 
 // ---------------- bootstrap: справочники ----------------
-router.add('GET', '/api/bootstrap', async ({ user }) => {
+router.add('GET', '/api/bootstrap', async ({ q, user }) => {
   const [acts, tags, counters] = await Promise.all([
-    db.query('SELECT id, name, color, position, is_sleep, archived FROM activities WHERE user_id=$1 ORDER BY position, id', [user.id]),
-    db.query('SELECT id, activity_id, name, position FROM tags WHERE user_id=$1 ORDER BY position, id', [user.id]),
-    db.query('SELECT id, name, unit, position FROM counters WHERE user_id=$1 ORDER BY position, id', [user.id]),
+    q.query('SELECT id, name, color, position, is_sleep, archived FROM activities WHERE user_id=$1 ORDER BY position, id', [user.id]),
+    q.query('SELECT id, activity_id, name, position FROM tags WHERE user_id=$1 ORDER BY position, id', [user.id]),
+    q.query('SELECT id, name, unit, position FROM counters WHERE user_id=$1 ORDER BY position, id', [user.id]),
   ]);
   return { user: { id: user.id, login: user.login, settings: user.settings }, activities: acts.rows, tags: tags.rows, counters: counters.rows };
 });
 
 // ---------------- activities ----------------
-router.add('POST', '/api/activities', async ({ user, body }) => {
+router.add('POST', '/api/activities', async ({ q, user, body }) => {
   const name = str(need(body.name, 'Название'), 100).trim();
   if (!isColor(body.color)) throw new HttpError(400, 'Цвет в формате #RRGGBB');
-  const pos = await db.query('SELECT coalesce(max(position),-1)+1 AS p FROM activities WHERE user_id=$1', [user.id]);
-  const r = await db.query('INSERT INTO activities(user_id,name,color,position,is_sleep) VALUES ($1,$2,$3,$4,$5) RETURNING *', [user.id, name, body.color.toUpperCase(), pos.rows[0].p, !!body.is_sleep]);
+  const pos = await q.query('SELECT coalesce(max(position),-1)+1 AS p FROM activities WHERE user_id=$1', [user.id]);
+  const r = await q.query('INSERT INTO activities(user_id,name,color,position,is_sleep) VALUES ($1,$2,$3,$4,$5) RETURNING *', [user.id, name, body.color.toUpperCase(), pos.rows[0].p, !!body.is_sleep]);
   return r.rows[0];
 });
-router.add('PUT', '/api/activities/order', async ({ user, body }) => {
+router.add('PUT', '/api/activities/order', async ({ q, user, body }) => {
   const ids = (body.ids || []).map((x) => int(x));
-  await db.tx(async (c) => { for (let i = 0; i < ids.length; i++) await c.query('UPDATE activities SET position=$1 WHERE id=$2 AND user_id=$3', [i, ids[i], user.id]); });
+  await tx(q, async (c) => { for (let i = 0; i < ids.length; i++) await c.query('UPDATE activities SET position=$1 WHERE id=$2 AND user_id=$3', [i, ids[i], user.id]); });
   return { ok: true };
 });
-router.add('PUT', '/api/activities/:id', async ({ user, body, params }) => {
+router.add('PUT', '/api/activities/:id', async ({ q, user, body, params }) => {
   const id = int(params.id);
-  const cur = await db.query('SELECT * FROM activities WHERE id=$1 AND user_id=$2', [id, user.id]);
+  const cur = await q.query('SELECT * FROM activities WHERE id=$1 AND user_id=$2', [id, user.id]);
   if (!cur.rowCount) throw new HttpError(404, 'Занятие не найдено');
   const a = cur.rows[0];
   const name = body.name !== undefined ? str(body.name, 100).trim() : a.name;
   const color = body.color !== undefined ? (isColor(body.color) ? body.color.toUpperCase() : (() => { throw new HttpError(400, 'Цвет'); })()) : a.color;
-  const r = await db.query('UPDATE activities SET name=$1, color=$2, is_sleep=$3, archived=$4 WHERE id=$5 RETURNING *',
-    [name, color, body.is_sleep !== undefined ? !!body.is_sleep : a.is_sleep, body.archived !== undefined ? !!body.archived : a.archived, id]);
+  const r = await q.query('UPDATE activities SET name=$1, color=$2, is_sleep=$3, archived=$4 WHERE id=$5 AND user_id=$6 RETURNING *',
+    [name, color, body.is_sleep !== undefined ? !!body.is_sleep : a.is_sleep, body.archived !== undefined ? !!body.archived : a.archived, id, user.id]);
   return r.rows[0];
 });
-router.add('DELETE', '/api/activities/:id', async ({ user, params }) => {
+router.add('DELETE', '/api/activities/:id', async ({ q, user, params }) => {
   const id = int(params.id);
-  const used = await db.query('SELECT count(*)::int n FROM events WHERE activity_id=$1 AND user_id=$2', [id, user.id]);
+  const used = await q.query('SELECT count(*)::int n FROM events WHERE activity_id=$1 AND user_id=$2', [id, user.id]);
   if (used.rows[0].n > 0) {
     // занятие с записями не удаляем, а архивируем
-    await db.query('UPDATE activities SET archived=true WHERE id=$1 AND user_id=$2', [id, user.id]);
+    await q.query('UPDATE activities SET archived=true WHERE id=$1 AND user_id=$2', [id, user.id]);
     return { ok: true, archived: true, used: used.rows[0].n };
   }
-  await db.query('DELETE FROM activities WHERE id=$1 AND user_id=$2', [id, user.id]);
+  const del = await q.query('DELETE FROM activities WHERE id=$1 AND user_id=$2 RETURNING id', [id, user.id]);
+  if (!del.rowCount) throw new HttpError(404, 'Занятие не найдено');
   return { ok: true };
 });
 
 // ---------------- tags ----------------
-router.add('POST', '/api/tags', async ({ user, body }) => {
+router.add('POST', '/api/tags', async ({ q, user, body }) => {
   const aid = int(body.activity_id, 'activity_id');
-  const own = await db.query('SELECT 1 FROM activities WHERE id=$1 AND user_id=$2', [aid, user.id]);
+  const own = await q.query('SELECT 1 FROM activities WHERE id=$1 AND user_id=$2', [aid, user.id]);
   if (!own.rowCount) throw new HttpError(404, 'Занятие не найдено');
-  const pos = await db.query('SELECT coalesce(max(position),-1)+1 p FROM tags WHERE activity_id=$1', [aid]);
-  const r = await db.query('INSERT INTO tags(user_id, activity_id, name, position) VALUES ($1,$2,$3,$4) RETURNING *', [user.id, aid, str(need(body.name, 'Название'), 100).trim(), pos.rows[0].p]);
+  const pos = await q.query('SELECT coalesce(max(position),-1)+1 p FROM tags WHERE activity_id=$1 AND user_id=$2', [aid, user.id]);
+  const r = await q.query('INSERT INTO tags(user_id, activity_id, name, position) VALUES ($1,$2,$3,$4) RETURNING *', [user.id, aid, str(need(body.name, 'Название'), 100).trim(), pos.rows[0].p]);
   return r.rows[0];
 });
-router.add('PUT', '/api/tags/:id', async ({ user, body, params }) => {
-  const r = await db.query('UPDATE tags SET name=$1 WHERE id=$2 AND user_id=$3 RETURNING *', [str(need(body.name, 'Название'), 100).trim(), int(params.id), user.id]);
+router.add('PUT', '/api/tags/:id', async ({ q, user, body, params }) => {
+  const r = await q.query('UPDATE tags SET name=$1 WHERE id=$2 AND user_id=$3 RETURNING *', [str(need(body.name, 'Название'), 100).trim(), int(params.id), user.id]);
   if (!r.rowCount) throw new HttpError(404, 'Тег не найден');
   return r.rows[0];
 });
-router.add('DELETE', '/api/tags/:id', async ({ user, params }) => { await db.query('DELETE FROM tags WHERE id=$1 AND user_id=$2', [int(params.id), user.id]); return { ok: true }; });
+router.add('DELETE', '/api/tags/:id', async ({ q, user, params }) => { await q.query('DELETE FROM tags WHERE id=$1 AND user_id=$2', [int(params.id), user.id]); return { ok: true }; });
 
 // ---------------- counters ----------------
-router.add('POST', '/api/counters', async ({ user, body }) => {
-  const pos = await db.query('SELECT coalesce(max(position),-1)+1 p FROM counters WHERE user_id=$1', [user.id]);
-  const r = await db.query('INSERT INTO counters(user_id,name,unit,position) VALUES ($1,$2,$3,$4) RETURNING *', [user.id, str(need(body.name, 'Название'), 100).trim(), str(body.unit, 20), pos.rows[0].p]);
+router.add('POST', '/api/counters', async ({ q, user, body }) => {
+  const pos = await q.query('SELECT coalesce(max(position),-1)+1 p FROM counters WHERE user_id=$1', [user.id]);
+  const r = await q.query('INSERT INTO counters(user_id,name,unit,position) VALUES ($1,$2,$3,$4) RETURNING *', [user.id, str(need(body.name, 'Название'), 100).trim(), str(body.unit, 20), pos.rows[0].p]);
   return r.rows[0];
 });
-router.add('PUT', '/api/counters/order', async ({ user, body }) => {
+router.add('PUT', '/api/counters/order', async ({ q, user, body }) => {
   const ids = (body.ids || []).map((x) => int(x));
-  await db.tx(async (c) => { for (let i = 0; i < ids.length; i++) await c.query('UPDATE counters SET position=$1 WHERE id=$2 AND user_id=$3', [i, ids[i], user.id]); });
+  await tx(q, async (c) => { for (let i = 0; i < ids.length; i++) await c.query('UPDATE counters SET position=$1 WHERE id=$2 AND user_id=$3', [i, ids[i], user.id]); });
   return { ok: true };
 });
-router.add('PUT', '/api/counters/:id', async ({ user, body, params }) => {
-  const r = await db.query('UPDATE counters SET name=coalesce($1,name), unit=coalesce($2,unit) WHERE id=$3 AND user_id=$4 RETURNING *', [body.name != null ? str(body.name, 100).trim() : null, body.unit != null ? str(body.unit, 20) : null, int(params.id), user.id]);
+router.add('PUT', '/api/counters/:id', async ({ q, user, body, params }) => {
+  const r = await q.query('UPDATE counters SET name=coalesce($1,name), unit=coalesce($2,unit) WHERE id=$3 AND user_id=$4 RETURNING *', [body.name != null ? str(body.name, 100).trim() : null, body.unit != null ? str(body.unit, 20) : null, int(params.id), user.id]);
   if (!r.rowCount) throw new HttpError(404, 'Счётчик не найден');
   return r.rows[0];
 });
-router.add('DELETE', '/api/counters/:id', async ({ user, params }) => { await db.query('DELETE FROM counters WHERE id=$1 AND user_id=$2', [int(params.id), user.id]); return { ok: true }; });
+router.add('DELETE', '/api/counters/:id', async ({ q, user, params }) => { await q.query('DELETE FROM counters WHERE id=$1 AND user_id=$2', [int(params.id), user.id]); return { ok: true }; });
 // Суммы по счётчику: помесячно (для страницы счётчиков)
-router.add('GET', '/api/counters/:id/stats', async ({ user, params }) => {
-  const r = await db.query(`SELECT to_char(day,'YYYY-MM') ym, sum(counter_value)::float total, count(*)::int n
+router.add('GET', '/api/counters/:id/stats', async ({ q, user, params }) => {
+  const own = await q.query('SELECT 1 FROM counters WHERE id=$1 AND user_id=$2', [int(params.id), user.id]);
+  if (!own.rowCount) throw new HttpError(404, 'Счётчик не найден');
+  const r = await q.query(`SELECT to_char(day,'YYYY-MM') ym, sum(counter_value)::float total, count(*)::int n
       FROM events WHERE user_id=$1 AND kind='counter' AND counter_id=$2 GROUP BY 1 ORDER BY 1 DESC LIMIT 24`, [user.id, int(params.id)]);
-  const all = await db.query(`SELECT coalesce(sum(counter_value),0)::float total, count(*)::int n FROM events WHERE user_id=$1 AND kind='counter' AND counter_id=$2`, [user.id, int(params.id)]);
+  const all = await q.query(`SELECT coalesce(sum(counter_value),0)::float total, count(*)::int n FROM events WHERE user_id=$1 AND kind='counter' AND counter_id=$2`, [user.id, int(params.id)]);
   return { months: r.rows, total: all.rows[0].total, n: all.rows[0].n };
 });
 
@@ -160,11 +166,11 @@ function fmtEvent(e) {
   return e;
 }
 
-async function eventsInRange(userId, from, to) {
-  const r = await db.query(`SELECT ${EVENT_COLS} FROM events WHERE user_id=$1 AND (
+async function eventsInRange(q, userId, from, to) {
+  const r = await q.query(`SELECT ${EVENT_COLS} FROM events WHERE user_id=$1 AND (
       (day BETWEEN $2 AND $3) OR (kind='task' AND days && (SELECT array_agg(d::date) FROM generate_series($2::date, $3::date, '1 day') d)))
       ORDER BY day, position, id`, [userId, from, to]);
-  const files = await db.query('SELECT id, event_id, name, mime, size FROM files WHERE user_id=$1 AND event_id IS NOT NULL AND event_id = ANY($2::bigint[])', [userId, r.rows.map((e) => e.id)]);
+  const files = await q.query('SELECT id, event_id, name, mime, size FROM files WHERE user_id=$1 AND event_id IS NOT NULL AND event_id = ANY($2::bigint[])', [userId, r.rows.map((e) => e.id)]);
   const byEvent = {};
   for (const f of files.rows) (byEvent[f.event_id] = byEvent[f.event_id] || []).push(f);
   return r.rows.map((e) => { e.files = byEvent[e.id] || []; return fmtEvent(e); });
@@ -173,20 +179,20 @@ async function eventsInRange(userId, from, to) {
 // Незавершённые задачи прошлых месяцев переносятся на первый день текущего месяца.
 // today приходит от клиента, чтобы месяц считался по часовому поясу устройства.
 const carriedFor = new Map();
-async function carryTasks(userId, today) {
+async function carryTasks(q, userId, today) {
   if (!isDate(today)) return;
   const first = `${today.slice(0, 7)}-01`;
   if (carriedFor.get(userId) === first) return;
   carriedFor.set(userId, first);
-  await db.query(`UPDATE events SET day=$2, days=ARRAY[$2::date], hours=NULL, updated_at=now()
+  await q.query(`UPDATE events SET day=$2, days=ARRAY[$2::date], hours=NULL, updated_at=now()
       WHERE user_id=$1 AND kind='task' AND done=false AND days IS NOT NULL
         AND (SELECT max(d) FROM unnest(days) d) < $2::date`, [userId, first]);
 }
 
-router.add('GET', '/api/events', async ({ user, query }) => {
+router.add('GET', '/api/events', async ({ q, user, query }) => {
   if (!isDate(query.from) || !isDate(query.to)) throw new HttpError(400, 'from/to в формате YYYY-MM-DD');
-  if (query.today) await carryTasks(user.id, query.today);
-  return { events: await eventsInRange(user.id, query.from, query.to) };
+  if (query.today) await carryTasks(q, user.id, query.today);
+  return { events: await eventsInRange(q, user.id, query.from, query.to) };
 });
 
 function validateEvent(e) {
@@ -232,10 +238,10 @@ function insertParams(userId, v) { return [userId, v.kind, v.day, v.hours, v.day
 function updateParams(id, userId, v) { return [id, userId, v.kind, v.day, v.hours, v.days, v.position, v.activity_id, v.tag_id, v.text, v.mood, v.kcal, v.protein, v.fat, v.carbs, v.food_calc, v.counter_id, v.counter_value, v.done]; }
 
 // Пакетное сохранение экрана «добавить»: upsert + delete в одной транзакции
-router.add('POST', '/api/events/batch', async ({ user, body }) => {
+router.add('POST', '/api/events/batch', async ({ q, user, body }) => {
   const upsert = Array.isArray(body.upsert) ? body.upsert : [];
   const del = Array.isArray(body.delete) ? body.delete.map((x) => int(x)) : [];
-  const saved = await db.tx(async (c) => {
+  const saved = await tx(q, async (c) => {
     const out = [];
     if (del.length) await c.query('DELETE FROM events WHERE user_id=$1 AND id = ANY($2::bigint[])', [user.id, del]);
     for (const e of upsert) {
@@ -250,41 +256,41 @@ router.add('POST', '/api/events/batch', async ({ user, body }) => {
   });
   return { events: saved };
 });
-router.add('POST', '/api/events', async ({ user, body }) => {
+router.add('POST', '/api/events', async ({ q, user, body }) => {
   const v = validateEvent(body);
-  return db.tx(async (c) => { await ownsRefs(c, user.id, v); const r = await c.query(INSERT_SQL, insertParams(user.id, v)); return fmtEvent(r.rows[0]); });
+  return tx(q, async (c) => { await ownsRefs(c, user.id, v); const r = await c.query(INSERT_SQL, insertParams(user.id, v)); return fmtEvent(r.rows[0]); });
 });
-router.add('PUT', '/api/events/:id', async ({ user, body, params }) => {
+router.add('PUT', '/api/events/:id', async ({ q, user, body, params }) => {
   const id = int(params.id);
-  const cur = await db.query(`SELECT ${EVENT_COLS} FROM events WHERE id=$1 AND user_id=$2`, [id, user.id]);
+  const cur = await q.query(`SELECT ${EVENT_COLS} FROM events WHERE id=$1 AND user_id=$2`, [id, user.id]);
   if (!cur.rowCount) throw new HttpError(404, 'Событие не найдено');
   const merged = { ...fmtEvent(cur.rows[0]), ...body };
   const v = validateEvent(merged);
-  return db.tx(async (c) => { await ownsRefs(c, user.id, v); const r = await c.query(UPDATE_SQL, updateParams(id, user.id, v)); return fmtEvent(r.rows[0]); });
+  return tx(q, async (c) => { await ownsRefs(c, user.id, v); const r = await c.query(UPDATE_SQL, updateParams(id, user.id, v)); return fmtEvent(r.rows[0]); });
 });
-router.add('DELETE', '/api/events/:id', async ({ user, params }) => {
-  const r = await db.query('DELETE FROM events WHERE id=$1 AND user_id=$2 RETURNING id', [int(params.id), user.id]);
+router.add('DELETE', '/api/events/:id', async ({ q, user, params }) => {
+  const r = await q.query('DELETE FROM events WHERE id=$1 AND user_id=$2 RETURNING id', [int(params.id), user.id]);
   if (!r.rowCount) throw new HttpError(404, 'Событие не найдено');
   return { ok: true };
 });
 // Лента мыслей (страница «мысли»)
-router.add('GET', '/api/thoughts', async ({ user, query }) => {
+router.add('GET', '/api/thoughts', async ({ q, user, query }) => {
   const limit = Math.min(int(query.limit || 200), 1000);
-  const r = await db.query(`SELECT ${EVENT_COLS} FROM events WHERE user_id=$1 AND kind='thought' ORDER BY day DESC, hours[1] DESC, id DESC LIMIT $2`, [user.id, limit]);
+  const r = await q.query(`SELECT ${EVENT_COLS} FROM events WHERE user_id=$1 AND kind='thought' ORDER BY day DESC, hours[1] DESC, id DESC LIMIT $2`, [user.id, limit]);
   return { events: r.rows.map(fmtEvent) };
 });
 
 // ---------------- food calc ----------------
-router.add('POST', '/api/food/calc', async ({ body }) => food.calc(str(body.text, 5000)));
+router.add('POST', '/api/food/calc', async ({ q, body }) => food.calc(str(body.text, 5000)));
 
 // Подсказки по ранее введённым строкам еды: записи режем на отдельные продукты
 // (переводы строки, запятые, точки с запятой) и отдаём самые свежие совпадения.
 // Сначала идут строки, начинающиеся с запроса, потом те, где он внутри.
-router.add('GET', '/api/food/suggest', async ({ user, query }) => {
-  const q = str(query.q, 100).trim();
-  if (q.length < 2) return { items: [] };
-  const esc = q.replace(/[%_\\]/g, (m) => '\\' + m);
-  const r = await db.query(`
+router.add('GET', '/api/food/suggest', async ({ q, user, query }) => {
+  const term = str(query.q, 100).trim();
+  if (term.length < 2) return { items: [] };
+  const esc = term.replace(/[%_\\]/g, (m) => '\\' + m);
+  const r = await q.query(`
     WITH parts AS (
       SELECT btrim(regexp_replace(p, '\\s+', ' ', 'g')) AS line, e.day, e.id
         FROM events e, regexp_split_to_table(e.text, '[\n;,]+') AS p
@@ -302,66 +308,66 @@ router.add('GET', '/api/food/suggest', async ({ user, query }) => {
 });
 
 // ---------------- important dates ----------------
-router.add('GET', '/api/dates', async ({ user }) => {
-  const r = await db.query('SELECT id, day, yearly, title FROM important_dates WHERE user_id=$1 ORDER BY day', [user.id]);
+router.add('GET', '/api/dates', async ({ q, user }) => {
+  const r = await q.query('SELECT id, day, yearly, title FROM important_dates WHERE user_id=$1 ORDER BY day', [user.id]);
   return { dates: r.rows.map((d) => ({ ...d, day: dateStr(d.day) })) };
 });
-router.add('POST', '/api/dates', async ({ user, body }) => {
+router.add('POST', '/api/dates', async ({ q, user, body }) => {
   if (!isDate(body.day)) throw new HttpError(400, 'Дата');
-  const r = await db.query('INSERT INTO important_dates(user_id, day, yearly, title) VALUES ($1,$2,$3,$4) RETURNING id, day, yearly, title', [user.id, body.day, !!body.yearly, str(body.title, 300).trim()]);
+  const r = await q.query('INSERT INTO important_dates(user_id, day, yearly, title) VALUES ($1,$2,$3,$4) RETURNING id, day, yearly, title', [user.id, body.day, !!body.yearly, str(body.title, 300).trim()]);
   return { ...r.rows[0], day: dateStr(r.rows[0].day) };
 });
-router.add('PUT', '/api/dates/:id', async ({ user, body, params }) => {
-  const cur = await db.query('SELECT * FROM important_dates WHERE id=$1 AND user_id=$2', [int(params.id), user.id]);
+router.add('PUT', '/api/dates/:id', async ({ q, user, body, params }) => {
+  const cur = await q.query('SELECT * FROM important_dates WHERE id=$1 AND user_id=$2', [int(params.id), user.id]);
   if (!cur.rowCount) throw new HttpError(404, 'Не найдено');
   const d = cur.rows[0];
   const day = body.day !== undefined ? (isDate(body.day) ? body.day : (() => { throw new HttpError(400, 'Дата'); })()) : dateStr(d.day);
-  const r = await db.query('UPDATE important_dates SET day=$1, yearly=$2, title=$3 WHERE id=$4 RETURNING id, day, yearly, title', [day, body.yearly !== undefined ? !!body.yearly : d.yearly, body.title !== undefined ? str(body.title, 300).trim() : d.title, d.id]);
+  const r = await q.query('UPDATE important_dates SET day=$1, yearly=$2, title=$3 WHERE id=$4 AND user_id=$5 RETURNING id, day, yearly, title', [day, body.yearly !== undefined ? !!body.yearly : d.yearly, body.title !== undefined ? str(body.title, 300).trim() : d.title, d.id, user.id]);
   return { ...r.rows[0], day: dateStr(r.rows[0].day) };
 });
-router.add('DELETE', '/api/dates/:id', async ({ user, params }) => { await db.query('DELETE FROM important_dates WHERE id=$1 AND user_id=$2', [int(params.id), user.id]); return { ok: true }; });
+router.add('DELETE', '/api/dates/:id', async ({ q, user, params }) => { await q.query('DELETE FROM important_dates WHERE id=$1 AND user_id=$2', [int(params.id), user.id]); return { ok: true }; });
 
 // ---------------- notes ----------------
-router.add('GET', '/api/notes', async ({ user }) => {
-  const r = await db.query(`SELECT n.id, n.parent_id, n.kind, n.title, n.icon, n.position, n.updated_at, length(n.content) AS content_length,
+router.add('GET', '/api/notes', async ({ q, user }) => {
+  const r = await q.query(`SELECT n.id, n.parent_id, n.kind, n.title, n.icon, n.position, n.updated_at, length(n.content) AS content_length,
       (SELECT count(*)::int FROM files f WHERE f.note_id = n.id) AS files_count
       FROM notes n WHERE n.user_id=$1 ORDER BY n.parent_id NULLS FIRST, n.position, n.id`, [user.id]);
   return { notes: r.rows };
 });
-router.add('GET', '/api/notes/:id', async ({ user, params }) => {
+router.add('GET', '/api/notes/:id', async ({ q, user, params }) => {
   const id = int(params.id);
-  const r = await db.query('SELECT id, parent_id, kind, title, icon, content, position, created_at, updated_at FROM notes WHERE id=$1 AND user_id=$2', [id, user.id]);
+  const r = await q.query('SELECT id, parent_id, kind, title, icon, content, position, created_at, updated_at FROM notes WHERE id=$1 AND user_id=$2', [id, user.id]);
   if (!r.rowCount) throw new HttpError(404, 'Заметка не найдена');
-  const files = await db.query('SELECT id, name, mime, size, created_at FROM files WHERE note_id=$1 AND user_id=$2 ORDER BY id', [id, user.id]);
-  const revs = await db.query('SELECT id, created_at, length(content) len FROM note_revisions WHERE note_id=$1 AND created_at > now() - interval \'30 minutes\' ORDER BY created_at DESC', [id]);
+  const files = await q.query('SELECT id, name, mime, size, created_at FROM files WHERE note_id=$1 AND user_id=$2 ORDER BY id', [id, user.id]);
+  const revs = await q.query('SELECT id, created_at, length(content) len FROM note_revisions WHERE note_id=$1 AND created_at > now() - interval \'30 minutes\' ORDER BY created_at DESC', [id]);
   return { note: r.rows[0], files: files.rows, revisions: revs.rows };
 });
-async function checkParent(userId, parentId) {
+async function checkParent(q, userId, parentId) {
   if (parentId == null) return null;
-  const p = await db.query('SELECT id, kind FROM notes WHERE id=$1 AND user_id=$2', [parentId, userId]);
+  const p = await q.query('SELECT id, kind FROM notes WHERE id=$1 AND user_id=$2', [parentId, userId]);
   if (!p.rowCount) throw new HttpError(400, 'Родитель не найден');
   return p.rows[0].id;
 }
-router.add('POST', '/api/notes', async ({ user, body }) => {
+router.add('POST', '/api/notes', async ({ q, user, body }) => {
   const kind = body.kind === 'folder' ? 'folder' : 'note';
-  const parent = await checkParent(user.id, body.parent_id != null ? int(body.parent_id) : null);
-  const pos = await db.query('SELECT coalesce(max(position),-1)+1 p FROM notes WHERE user_id=$1 AND parent_id IS NOT DISTINCT FROM $2', [user.id, parent]);
-  const r = await db.query('INSERT INTO notes(user_id, parent_id, kind, title, icon, content, position) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, parent_id, kind, title, icon, position, updated_at',
+  const parent = await checkParent(q, user.id, body.parent_id != null ? int(body.parent_id) : null);
+  const pos = await q.query('SELECT coalesce(max(position),-1)+1 p FROM notes WHERE user_id=$1 AND parent_id IS NOT DISTINCT FROM $2', [user.id, parent]);
+  const r = await q.query('INSERT INTO notes(user_id, parent_id, kind, title, icon, content, position) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, parent_id, kind, title, icon, position, updated_at',
     [user.id, parent, kind, str(body.title, 300).trim() || (kind === 'folder' ? 'новая папка' : 'новая заметка'), str(body.icon, 40), str(body.content, 1000000), pos.rows[0].p]);
   return r.rows[0];
 });
-router.add('PUT', '/api/notes/:id', async ({ user, body, params }) => {
+router.add('PUT', '/api/notes/:id', async ({ q, user, body, params }) => {
   const id = int(params.id);
-  return db.tx(async (c) => {
+  return tx(q, async (c) => {
     const cur = await c.query('SELECT * FROM notes WHERE id=$1 AND user_id=$2 FOR UPDATE', [id, user.id]);
     if (!cur.rowCount) throw new HttpError(404, 'Заметка не найдена');
     const n = cur.rows[0];
     let parent = n.parent_id, position = n.position;
     if (body.parent_id !== undefined) {
-      parent = await checkParent(user.id, body.parent_id != null ? int(body.parent_id) : null);
+      parent = await checkParent(q, user.id, body.parent_id != null ? int(body.parent_id) : null);
       // нельзя переместить папку внутрь самой себя
       if (parent != null) {
-        const cyc = await c.query(`WITH RECURSIVE up AS (SELECT id, parent_id FROM notes WHERE id=$1 UNION ALL SELECT n.id, n.parent_id FROM notes n JOIN up ON n.id = up.parent_id) SELECT 1 FROM up WHERE id=$2`, [parent, id]);
+        const cyc = await c.query(`WITH RECURSIVE up AS (SELECT id, parent_id FROM notes WHERE id=$1 AND user_id=$3 UNION ALL SELECT n.id, n.parent_id FROM notes n JOIN up ON n.id = up.parent_id) SELECT 1 FROM up WHERE id=$2`, [parent, id, user.id]);
         if (cyc.rowCount) throw new HttpError(400, 'Нельзя вложить папку в саму себя');
       }
       if (parent !== n.parent_id) {
@@ -380,24 +386,24 @@ router.add('PUT', '/api/notes/:id', async ({ user, body, params }) => {
       }
       await c.query('DELETE FROM note_revisions WHERE note_id=$1 AND created_at < now() - interval \'30 minutes\'', [id]);
     }
-    const r = await c.query('UPDATE notes SET parent_id=$1, position=$2, title=$3, icon=$4, content=$5, updated_at=CASE WHEN $5 <> content OR $3 <> title THEN now() ELSE updated_at END WHERE id=$6 RETURNING id, parent_id, kind, title, icon, position, updated_at',
-      [parent, position, title, body.icon !== undefined ? str(body.icon, 40) : n.icon, content, id]);
+    const r = await c.query('UPDATE notes SET parent_id=$1, position=$2, title=$3, icon=$4, content=$5, updated_at=CASE WHEN $5 <> content OR $3 <> title THEN now() ELSE updated_at END WHERE id=$6 AND user_id=$7 RETURNING id, parent_id, kind, title, icon, position, updated_at',
+      [parent, position, title, body.icon !== undefined ? str(body.icon, 40) : n.icon, content, id, user.id]);
     return r.rows[0];
   });
 });
-router.add('POST', '/api/notes/:id/restore', async ({ user, body, params }) => {
+router.add('POST', '/api/notes/:id/restore', async ({ q, user, body, params }) => {
   const id = int(params.id);
-  const rev = await db.query('SELECT r.* FROM note_revisions r JOIN notes n ON n.id = r.note_id WHERE r.id=$1 AND n.id=$2 AND n.user_id=$3', [int(body.revision_id), id, user.id]);
+  const rev = await q.query('SELECT r.* FROM note_revisions r JOIN notes n ON n.id = r.note_id WHERE r.id=$1 AND n.id=$2 AND n.user_id=$3', [int(body.revision_id), id, user.id]);
   if (!rev.rowCount) throw new HttpError(404, 'Версия не найдена');
-  const r = await db.query('UPDATE notes SET content=$1, title=$2, updated_at=now() WHERE id=$3 RETURNING id, title, content, updated_at', [rev.rows[0].content, rev.rows[0].title, id]);
+  const r = await q.query('UPDATE notes SET content=$1, title=$2, updated_at=now() WHERE id=$3 AND user_id=$4 RETURNING id, title, content, updated_at', [rev.rows[0].content, rev.rows[0].title, id, user.id]);
   return r.rows[0];
 });
-router.add('DELETE', '/api/notes/:id', async ({ user, params }) => {
+router.add('DELETE', '/api/notes/:id', async ({ q, user, params }) => {
   const id = int(params.id);
   // удаляем файлы с диска для всего поддерева
-  const files = await db.query(`WITH RECURSIVE t AS (SELECT id FROM notes WHERE id=$1 AND user_id=$2 UNION ALL SELECT n.id FROM notes n JOIN t ON n.parent_id = t.id)
+  const files = await q.query(`WITH RECURSIVE t AS (SELECT id FROM notes WHERE id=$1 AND user_id=$2 UNION ALL SELECT n.id FROM notes n JOIN t ON n.parent_id = t.id)
       SELECT f.storage_key FROM files f WHERE f.note_id IN (SELECT id FROM t)`, [id, user.id]);
-  const r = await db.query('DELETE FROM notes WHERE id=$1 AND user_id=$2 RETURNING id', [id, user.id]);
+  const r = await q.query('DELETE FROM notes WHERE id=$1 AND user_id=$2 RETURNING id', [id, user.id]);
   if (!r.rowCount) throw new HttpError(404, 'Заметка не найдена');
   for (const f of files.rows) fs.promises.unlink(path.join(config.uploadDir, f.storage_key)).catch(() => {});
   return { ok: true };
@@ -405,13 +411,13 @@ router.add('DELETE', '/api/notes/:id', async ({ user, params }) => {
 
 // ---------------- files ----------------
 // Загрузка: тело запроса = содержимое файла; имя/тип/привязка — в query.
-router.add('POST', '/api/files', async ({ user, req, query }) => {
+router.add('POST', '/api/files', async ({ q, user, req, query }) => {
   const name = str(query.name || 'file', 200).replace(/[/\\]/g, '_');
   const mime = str(query.mime || req.headers['content-type'] || 'application/octet-stream', 100).split(';')[0];
   const noteId = query.note_id ? int(query.note_id) : null;
   const eventId = query.event_id ? int(query.event_id) : null;
-  if (noteId) { const r = await db.query('SELECT 1 FROM notes WHERE id=$1 AND user_id=$2', [noteId, user.id]); if (!r.rowCount) throw new HttpError(404, 'Заметка не найдена'); }
-  if (eventId) { const r = await db.query('SELECT 1 FROM events WHERE id=$1 AND user_id=$2', [eventId, user.id]); if (!r.rowCount) throw new HttpError(404, 'Событие не найдено'); }
+  if (noteId) { const r = await q.query('SELECT 1 FROM notes WHERE id=$1 AND user_id=$2', [noteId, user.id]); if (!r.rowCount) throw new HttpError(404, 'Заметка не найдена'); }
+  if (eventId) { const r = await q.query('SELECT 1 FROM events WHERE id=$1 AND user_id=$2', [eventId, user.id]); if (!r.rowCount) throw new HttpError(404, 'Событие не найдено'); }
   const buf = await readBody(req, config.maxUploadBytes);
   if (!buf.length) throw new HttpError(400, 'Пустой файл');
   const ext = path.extname(name).toLowerCase().slice(0, 10);
@@ -419,17 +425,17 @@ router.add('POST', '/api/files', async ({ user, req, query }) => {
   const full = path.join(config.uploadDir, key);
   await fs.promises.mkdir(path.dirname(full), { recursive: true });
   await fs.promises.writeFile(full, buf);
-  const r = await db.query('INSERT INTO files(user_id, note_id, event_id, name, mime, size, storage_key) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, note_id, event_id, name, mime, size, created_at', [user.id, noteId, eventId, name, mime, buf.length, key]);
+  const r = await q.query('INSERT INTO files(user_id, note_id, event_id, name, mime, size, storage_key) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, note_id, event_id, name, mime, size, created_at', [user.id, noteId, eventId, name, mime, buf.length, key]);
   return r.rows[0];
 });
-router.add('PUT', '/api/files/:id', async ({ user, body, params }) => {
+router.add('PUT', '/api/files/:id', async ({ q, user, body, params }) => {
   // привязка файла к событию после его создания
-  const r = await db.query('UPDATE files SET event_id=coalesce($1,event_id), note_id=coalesce($2,note_id) WHERE id=$3 AND user_id=$4 RETURNING id, note_id, event_id, name, mime, size', [body.event_id != null ? int(body.event_id) : null, body.note_id != null ? int(body.note_id) : null, int(params.id), user.id]);
+  const r = await q.query('UPDATE files SET event_id=coalesce($1,event_id), note_id=coalesce($2,note_id) WHERE id=$3 AND user_id=$4 RETURNING id, note_id, event_id, name, mime, size', [body.event_id != null ? int(body.event_id) : null, body.note_id != null ? int(body.note_id) : null, int(params.id), user.id]);
   if (!r.rowCount) throw new HttpError(404, 'Файл не найден');
   return r.rows[0];
 });
-router.add('GET', '/api/files/:id', async ({ user, params, query, res }) => {
-  const r = await db.query('SELECT * FROM files WHERE id=$1 AND user_id=$2', [int(params.id), user.id]);
+router.add('GET', '/api/files/:id', async ({ q, user, params, query, res }) => {
+  const r = await q.query('SELECT * FROM files WHERE id=$1 AND user_id=$2', [int(params.id), user.id]);
   if (!r.rowCount) throw new HttpError(404, 'Файл не найден');
   const f = r.rows[0];
   const full = path.join(config.uploadDir, f.storage_key);
@@ -446,30 +452,31 @@ router.add('GET', '/api/files/:id', async ({ user, params, query, res }) => {
   fs.createReadStream(full).pipe(res);
   return undefined; // ответ уже отправлен
 });
-router.add('DELETE', '/api/files/:id', async ({ user, params }) => {
-  const r = await db.query('DELETE FROM files WHERE id=$1 AND user_id=$2 RETURNING storage_key', [int(params.id), user.id]);
-  if (r.rowCount) fs.promises.unlink(path.join(config.uploadDir, r.rows[0].storage_key)).catch(() => {});
+router.add('DELETE', '/api/files/:id', async ({ q, user, params }) => {
+  const r = await q.query('DELETE FROM files WHERE id=$1 AND user_id=$2 RETURNING storage_key', [int(params.id), user.id]);
+  if (!r.rowCount) throw new HttpError(404, 'Файл не найден');
+  fs.promises.unlink(path.join(config.uploadDir, r.rows[0].storage_key)).catch(() => {});
   return { ok: true };
 });
 
 // ---------------- search ----------------
-router.add('GET', '/api/search', async ({ user, query }) => {
-  const q = str(query.q, 200).trim();
-  if (q.length < 2) return { events: [], notes: [], dates: [], activities: [] };
+router.add('GET', '/api/search', async ({ q, user, query }) => {
+  const term = str(query.q, 200).trim();
+  if (term.length < 2) return { events: [], notes: [], dates: [], activities: [] };
   // websearch_to_tsquery понимает фразы в кавычках и минус; плюс префиксное совпадение по последнему слову и ILIKE как подстраховка
-  const like = '%' + q.replace(/[%_\\]/g, (m) => '\\' + m) + '%';
-  const words = q.split(/\s+/).filter(Boolean).map((w) => w.replace(/[^\p{L}\p{N}]/gu, '')).filter(Boolean);
+  const like = '%' + term.replace(/[%_\\]/g, (m) => '\\' + m) + '%';
+  const words = term.split(/\s+/).filter(Boolean).map((w) => w.replace(/[^\p{L}\p{N}]/gu, '')).filter(Boolean);
   const prefix = words.length ? words.map((w) => w + ':*').join(' & ') : null;
   const [events, notes, dates, acts] = await Promise.all([
-    db.query(`SELECT ${EVENT_COLS}, ts_rank(tsv, websearch_to_tsquery('russian', $2)) AS rank
+    q.query(`SELECT ${EVENT_COLS}, ts_rank(tsv, websearch_to_tsquery('russian', $2)) AS rank
         FROM events WHERE user_id=$1 AND (tsv @@ websearch_to_tsquery('russian', $2) OR ($3::text IS NOT NULL AND tsv @@ to_tsquery('russian', $3)) OR text ILIKE $4)
-        ORDER BY rank DESC, day DESC LIMIT 100`, [user.id, q, prefix, like]),
-    db.query(`SELECT id, parent_id, kind, title, icon, updated_at, ts_headline('russian', content, websearch_to_tsquery('russian', $2), 'MaxWords=18, MinWords=6, MaxFragments=1') AS snippet,
+        ORDER BY rank DESC, day DESC LIMIT 100`, [user.id, term, prefix, like]),
+    q.query(`SELECT id, parent_id, kind, title, icon, updated_at, ts_headline('russian', content, websearch_to_tsquery('russian', $2), 'MaxWords=18, MinWords=6, MaxFragments=1') AS snippet,
         ts_rank(tsv, websearch_to_tsquery('russian', $2)) AS rank
         FROM notes WHERE user_id=$1 AND (tsv @@ websearch_to_tsquery('russian', $2) OR ($3::text IS NOT NULL AND tsv @@ to_tsquery('russian', $3)) OR title ILIKE $4 OR content ILIKE $4)
-        ORDER BY rank DESC, updated_at DESC LIMIT 50`, [user.id, q, prefix, like]),
-    db.query(`SELECT id, day, yearly, title FROM important_dates WHERE user_id=$1 AND (tsv @@ websearch_to_tsquery('russian', $2) OR title ILIKE $3) ORDER BY day LIMIT 50`, [user.id, q, like]),
-    db.query(`SELECT a.id, a.name, a.color, count(e.id)::int AS n FROM activities a LEFT JOIN events e ON e.activity_id = a.id
+        ORDER BY rank DESC, updated_at DESC LIMIT 50`, [user.id, term, prefix, like]),
+    q.query(`SELECT id, day, yearly, title FROM important_dates WHERE user_id=$1 AND (tsv @@ websearch_to_tsquery('russian', $2) OR title ILIKE $3) ORDER BY day LIMIT 50`, [user.id, term, like]),
+    q.query(`SELECT a.id, a.name, a.color, count(e.id)::int AS n FROM activities a LEFT JOIN events e ON e.activity_id = a.id
         WHERE a.user_id=$1 AND a.name ILIKE $2 GROUP BY a.id ORDER BY a.position LIMIT 20`, [user.id, like]),
   ]);
   return {

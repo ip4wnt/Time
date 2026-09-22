@@ -171,3 +171,26 @@ CREATE TABLE IF NOT EXISTS files (
 );
 CREATE INDEX IF NOT EXISTS files_note_idx ON files(note_id);
 CREATE INDEX IF NOT EXISTS files_event_idx ON files(event_id);
+
+-- ===== Изоляция данных пользователей на уровне базы (Row Level Security) =====
+-- Приложение открывает транзакцию и выставляет chronum.user_id (см. db.withUser).
+-- После этого строки других пользователей не видны и не записываются — даже если
+-- в запросе забыли условие WHERE user_id. Служебные задачи (регистрация, импорт,
+-- очистка) работают в транзакции с chronum.admin='on' (см. db.txAdmin).
+-- FORCE нужен потому, что владелец таблиц иначе политики обходит.
+DO $rls$
+DECLARE
+  t     text;
+  cond  text := $c$(
+    user_id = nullif(current_setting('chronum.user_id', true), '')::bigint
+    OR current_setting('chronum.admin', true) = 'on'
+  )$c$;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['activities', 'tags', 'counters', 'events', 'important_dates', 'notes', 'files'] LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+    EXECUTE format('DROP POLICY IF EXISTS %I ON %I', t || '_own', t);
+    EXECUTE format('CREATE POLICY %I ON %I USING %s WITH CHECK %s', t || '_own', t, cond, cond);
+  END LOOP;
+END
+$rls$;

@@ -39,7 +39,12 @@ async function handleApi(req, res, url) {
   const query = Object.fromEntries(url.searchParams.entries());
   const isJson = (req.headers['content-type'] || '').includes('application/json');
   const body = ['POST', 'PUT', 'PATCH'].includes(req.method) && isJson ? await readJson(req) : {};
-  const result = await match.handler({ req, res, user, params: match.params, query, body });
+  // Запросы авторизованного пользователя идут в транзакции с выставленным chronum.user_id:
+  // политики RLS (sql/schema.sql) показывают обработчику только его строки.
+  const ctx = { req, res, user, params: match.params, query, body };
+  const result = user
+    ? await db.withUser(user.id, (q) => match.handler({ ...ctx, q }))
+    : await match.handler({ ...ctx, q: null });
   if (result !== undefined && !res.headersSent) sendJson(res, 200, result);
 }
 

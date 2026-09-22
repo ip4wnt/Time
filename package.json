@@ -7,9 +7,13 @@
   "scripts": {
     "start": "node server/index.js",
     "migrate": "node -e \"require('./server/db').migrate().then(()=>{console.log('ok');process.exit(0)})\"",
-    "import": "node scripts/import-legacy.js"
+    "import": "node scripts/import-legacy.js",
+    "test:isolation": "node scripts/test-isolation.js",
+    "check:scoping": "node scripts/check-scoping.js"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "pg": "^8.13.0"
   }

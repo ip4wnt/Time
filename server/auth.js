@@ -128,8 +128,12 @@ async function purgeDeletedUsers() {
     `SELECT id FROM users WHERE delete_requested_at IS NOT NULL
        AND delete_requested_at < now() - ($1::int * interval '1 day')`, [DELETE_AFTER_DAYS]);
   for (const u of gone.rows) {
-    const files = await db.query('SELECT storage_key FROM files WHERE user_id = $1', [u.id]);
-    await db.query('DELETE FROM users WHERE id = $1', [u.id]);   // остальное уходит по ON DELETE CASCADE
+    // служебная транзакция: политики RLS пропускают её, пользовательского контекста здесь нет
+    const files = await db.txAdmin(async (c) => {
+      const f = await c.query('SELECT storage_key FROM files WHERE user_id = $1', [u.id]);
+      await c.query('DELETE FROM users WHERE id = $1', [u.id]);   // остальное уходит по ON DELETE CASCADE
+      return f;
+    });
     for (const f of files.rows) {
       await fs.promises.unlink(path.join(config.uploadDir, f.storage_key)).catch(() => {});
     }
@@ -145,7 +149,8 @@ async function createUser(loginRaw, password) {
   validatePassword(password);
   const exists = await db.query('SELECT 1 FROM users WHERE login_norm = $1', [norm]);
   if (exists.rowCount) throw new HttpError(409, 'Этот логин уже занят');
-  return db.tx(async (c) => {
+  // служебная транзакция: пользователя ещё нет, поэтому заготовки создаём в обход RLS
+  return db.txAdmin(async (c) => {
     const u = await c.query('INSERT INTO users(login, login_norm, password_hash) VALUES ($1,$2,$3) RETURNING id',
       [String(loginRaw).trim(), norm, hashPassword(password)]);
     const id = u.rows[0].id;
