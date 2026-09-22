@@ -76,6 +76,7 @@ async function main() {
     db.query('DELETE FROM sessions WHERE expires_at < now()').catch(() => {});
     db.query("DELETE FROM login_attempts WHERE created_at < now() - interval '30 days'").catch(() => {});
     db.query("DELETE FROM note_revisions WHERE created_at < now() - interval '1 hour'").catch(() => {});
+    auth.purgeDeletedUsers().catch((e) => console.error('[cleanup] удаление аккаунтов', e));
   };
   cleanup();
   setInterval(cleanup, 60 * 60 * 1000).unref();

@@ -13,6 +13,9 @@ CREATE TABLE IF NOT EXISTS users (
 -- Пароль хранится только в виде хэша (scrypt + соль), формат: scrypt$<salt hex>$<hash hex>
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
 
+-- Запрос на удаление аккаунта: через 30 дней данные удаляются, вход до срока отменяет удаление
+ALTER TABLE users ADD COLUMN IF NOT EXISTS delete_requested_at TIMESTAMPTZ;
+
 -- Контрольные вопросы: не используются с переходом на вход по паролю, таблица оставлена для старых данных
 CREATE TABLE IF NOT EXISTS security_questions (
   id          BIGSERIAL PRIMARY KEY,

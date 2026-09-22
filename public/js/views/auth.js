@@ -1,6 +1,6 @@
 // Авторизация: классический вход по логину и паролю, рядом — ссылка на регистрацию.
 import { post, setToken } from '../api.js';
-import { h } from '../ui.js';
+import { h, toast } from '../ui.js';
 import { esc } from '../state.js';
 
 export function renderAuth(root) {
@@ -12,7 +12,10 @@ export function renderAuth(root) {
     root.appendChild(el);
     const body = el.querySelector('.auth-body');
 
-    const done = (token) => { setToken(token); el.remove(); resolve(); };
+    const done = (token, restored) => {
+      setToken(token); el.remove(); resolve();
+      if (restored) setTimeout(() => toast('удаление аккаунта отменено'), 400);
+    };
     const showErr = (msg) => { const e = body.querySelector('.auth-err'); if (e) e.textContent = msg; };
 
     function stepLogin(login = '') {
@@ -33,7 +36,7 @@ export function renderAuth(root) {
         if (!l) { showErr('Введите логин'); return; }
         if (!p) { showErr('Введите пароль'); return; }
         showErr('');
-        try { const r = await post('/api/auth/login', { login: l, password: p }); done(r.token); }
+        try { const r = await post('/api/auth/login', { login: l, password: p }); done(r.token, r.restored); }
         catch (e) { showErr(e.message); }
       });
       body.querySelector('[data-act=reg]').onclick = () => stepRegister(form.login.value.trim());

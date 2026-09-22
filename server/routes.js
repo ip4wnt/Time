@@ -53,6 +53,11 @@ router.add('PUT', '/api/me/settings', async ({ user, body }) => {
   await db.query('UPDATE users SET settings = settings || $2::jsonb WHERE id=$1', [user.id, JSON.stringify(settings)]);
   return { ok: true };
 });
+router.add('POST', '/api/me/delete', async ({ user, res }) => {
+  const r = await auth.requestDeletion(user.id);
+  res.setHeader('Set-Cookie', clearCookie());
+  return { ok: true, days: r.days };
+});
 router.add('POST', '/api/me/logout-all', async ({ user, res }) => {
   await db.query('DELETE FROM sessions WHERE user_id=$1', [user.id]);
   res.setHeader('Set-Cookie', clearCookie());

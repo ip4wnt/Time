@@ -2,6 +2,8 @@
 // Авторизация: логин + пароль. Пароль хранится только как scrypt-хэш,
 // сессии — как SHA-256 от токена.
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 const db = require('./db');
 const config = require('./config');
 const { HttpError } = require('./http');
@@ -90,7 +92,7 @@ async function login(loginRaw, password, req) {
   await checkRateLimit(req.ip);
   const norm = normalizeLogin(loginRaw);
   if (!norm || norm.length > 64) throw new HttpError(400, 'Введите логин');
-  const u = await db.query('SELECT id, login, password_hash FROM users WHERE login_norm = $1', [norm]);
+  const u = await db.query('SELECT id, login, password_hash, delete_requested_at FROM users WHERE login_norm = $1', [norm]);
   if (!u.rowCount) {
     await logAttempt(norm, req.ip, false);
     throw new HttpError(401, 'Неверный логин или пароль');
@@ -100,8 +102,40 @@ async function login(loginRaw, password, req) {
   const ok = verifyPassword(password, row.password_hash);
   await logAttempt(norm, req.ip, ok);
   if (!ok) throw new HttpError(401, 'Неверный логин или пароль');
+  // Вход в течение 30 дней отменяет запрос на удаление аккаунта
+  let restored = false;
+  if (row.delete_requested_at) {
+    await db.query('UPDATE users SET delete_requested_at = NULL WHERE id = $1', [row.id]);
+    restored = true;
+  }
   const s = await createSession(row.id, req);
-  return { status: 'ok', ...s };
+  return { status: 'ok', restored, ...s };
+}
+
+// ---- удаление аккаунта ----
+// Помечаем аккаунт и выходим со всех устройств. Через DELETE_AFTER_DAYS данные удаляются.
+const DELETE_AFTER_DAYS = 30;
+
+async function requestDeletion(userId) {
+  await db.query('UPDATE users SET delete_requested_at = now() WHERE id = $1', [userId]);
+  await db.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+  return { days: DELETE_AFTER_DAYS };
+}
+
+// Окончательное удаление просроченных аккаунтов (вызывается по таймеру в server/index.js)
+async function purgeDeletedUsers() {
+  const gone = await db.query(
+    `SELECT id FROM users WHERE delete_requested_at IS NOT NULL
+       AND delete_requested_at < now() - ($1::int * interval '1 day')`, [DELETE_AFTER_DAYS]);
+  for (const u of gone.rows) {
+    const files = await db.query('SELECT storage_key FROM files WHERE user_id = $1', [u.id]);
+    await db.query('DELETE FROM users WHERE id = $1', [u.id]);   // остальное уходит по ON DELETE CASCADE
+    for (const f of files.rows) {
+      await fs.promises.unlink(path.join(config.uploadDir, f.storage_key)).catch(() => {});
+    }
+    console.log(`[cleanup] аккаунт id=${u.id} удалён окончательно`);
+  }
+  return gone.rowCount;
 }
 
 // Регистрация: логин + пароль
@@ -169,4 +203,5 @@ module.exports = {
   createUser, setPassword, changePassword,
   normalizeLogin, hashPassword, verifyPassword, createSession, getSessionUser, destroySession,
   login, register, seedDefaults, DEFAULT_ACTIVITIES,
+  requestDeletion, purgeDeletedUsers, DELETE_AFTER_DAYS,
 };

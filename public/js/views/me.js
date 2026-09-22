@@ -1,7 +1,7 @@
 // Страница «профиль»: пароль, норма калорий, сессии.
 import { get, put, post, setToken } from '../api.js';
 import { state, esc, kcalNorm } from '../state.js';
-import { h, header, toast, confirm } from '../ui.js';
+import { h, header, toast, confirm, dialog } from '../ui.js';
 
 export async function renderMe() {
   const app = document.getElementById('app');
@@ -54,6 +54,31 @@ export async function renderMe() {
     setToken(null); location.reload();
   };
   page.appendChild(lo);
+
+  // --- удаление аккаунта
+  page.appendChild(h('<h2 class="h">удаление аккаунта</h2>'));
+  page.appendChild(h('<p class="p">удаляется всё: дни, занятия, заметки, файлы. сразу после подтверждения\u00a0— выход на\u00a0всех устройствах. данные лежат ещё 30\u00a0дней: войдёте за\u00a0это время\u00a0— удаление отменится, не\u00a0войдёте\u00a0— удалятся безвозвратно.</p>'));
+  const df = h('<div class="row"><button class="btn small danger" data-act="del">удалить аккаунт</button></div>');
+  df.querySelector('[data-act=del]').onclick = async () => {
+    const ok = await dialog({
+      title: 'Удалить аккаунт?',
+      body: '<p class="p">все данные будут утеряны безвозвратно. вы сразу выйдете на\u00a0всех устройствах.</p>'
+          + '<p class="p" style="margin-top:1rem">удаление произойдёт через 30\u00a0дней. если войдёте раньше\u00a0— удаление отменится.</p>',
+      actions: [{ label: 'удалить аккаунт', value: true, cls: 'danger' }],
+    });
+    if (!ok) return;
+    try {
+      const r = await post('/api/me/delete');
+      await dialog({
+        title: 'Аккаунт помечен на удаление',
+        body: `<p class="p">вы вышли на\u00a0всех устройствах. данные удалятся через ${r.days || 30}\u00a0дней\u00a0— чтобы отменить, просто войдите снова до\u00a0этого срока.</p>`,
+        actions: [{ label: 'понятно', value: true }],
+        cancel: false,
+      });
+      setToken(null); location.reload();
+    } catch (e) { toast(e.message); }
+  };
+  page.appendChild(df);
 }
 
 function shortUA(ua = '') {
