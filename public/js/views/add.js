@@ -188,8 +188,6 @@ export async function renderAdd(q) {
     const redraw = () => activityBody(en, body);
     body.innerHTML = '';
     body.appendChild(swatches(en, redraw));
-    const a = en.activity_id ? activity(en.activity_id) : null;
-    if (a) body.appendChild(h(`<div class="swatch-name">${esc(a.name)}</div>`));
     body.appendChild(textarea(en, PLACEHOLDER.activity, 'big'));
     const tg = tagsRow(en, redraw);
     if (tg) body.appendChild(tg);
@@ -351,8 +349,6 @@ export async function renderAdd(q) {
     const redraw = () => taskBody(en, body);
     body.innerHTML = '';
     body.appendChild(swatches(en, redraw));
-    const a = en.activity_id ? activity(en.activity_id) : null;
-    if (a) body.appendChild(h(`<div class="swatch-name">${esc(a.name)}</div>`));
     body.appendChild(textarea(en, PLACEHOLDER.task, 'big'));
     const tg = tagsRow(en, redraw);
     if (tg) body.appendChild(tg);

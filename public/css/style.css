@@ -281,7 +281,6 @@ svg { display: block; }
 .swatch .ck svg { width: 100%; height: 100%; }
 .swatch.lt .ck { color: #222; }
 .swatch.none { background: none; border: .2rem solid var(--num); }
-.swatch-name { margin-top: 1rem; font-size: 1.8rem; color: var(--muted); }
 .hpick { display: grid; grid-template-columns: repeat(6, 1fr); gap: .6rem; }
 .hpick button { height: 5.4rem; background: var(--cell); color: var(--text); font-size: 1.8rem; }
 .hpick button.on { background: var(--num); color: #0E0E0E; }
