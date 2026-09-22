@@ -114,6 +114,7 @@ fi
 echo
 echo "Готово: $URL"
 [[ -n "$DOMAIN" ]] || echo "ВНИМАНИЕ: сейчас без HTTPS. Появится домен — перезапустите: sudo DOMAIN=ваш.домен EMAIL=почта bash deploy/install.sh"
-echo "Создать пользователя:  cd $APP_DIR && sudo -u chronum env CHRONUM_ENV=$ENV_DIR/.env node scripts/create-user.js \"Логин\" \"Вопрос 1\" \"Ответ 1\" \"Вопрос 2\" \"Ответ 2\""
+echo "Создать пользователя:  cd $APP_DIR && sudo -u chronum env CHRONUM_ENV=$ENV_DIR/.env node scripts/create-user.js \"Логин\" \"Пароль\""
+echo "Сменить пароль:        cd $APP_DIR && sudo -u chronum env CHRONUM_ENV=$ENV_DIR/.env node scripts/set-password.js \"Логин\" \"Пароль\""
 echo "Импорт старой выгрузки: sudo -u chronum env CHRONUM_ENV=$ENV_DIR/.env node scripts/import-legacy.js \"Логин\" /путь/backup.json"
 echo "Логи: journalctl -u chronum -f"
