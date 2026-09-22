@@ -85,13 +85,16 @@ async function logAttempt(login, ip, ok) {
 }
 
 // ---- вход ----
-// Шаг 1: логин + пароль. Незнакомый логин -> клиент предлагает регистрацию.
+// Классический вход: логин + пароль. Про незнакомый логин не сообщаем отдельно.
 async function login(loginRaw, password, req) {
   await checkRateLimit(req.ip);
   const norm = normalizeLogin(loginRaw);
   if (!norm || norm.length > 64) throw new HttpError(400, 'Введите логин');
   const u = await db.query('SELECT id, login, password_hash FROM users WHERE login_norm = $1', [norm]);
-  if (!u.rowCount) return { status: 'new', login: String(loginRaw).trim() };
+  if (!u.rowCount) {
+    await logAttempt(norm, req.ip, false);
+    throw new HttpError(401, 'Неверный логин или пароль');
+  }
   const row = u.rows[0];
   if (!row.password_hash) throw new HttpError(409, 'У этого логина пароль ещё не задан');
   const ok = verifyPassword(password, row.password_hash);

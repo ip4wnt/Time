@@ -28,7 +28,6 @@ function clearCookie() { return cookieHeader(COOKIE, '', { maxAge: 0, secure: co
 // ---------------- auth ----------------
 router.add('POST', '/api/auth/login', async ({ body, req, res }) => {
   const r = await auth.login(body.login, body.password, req);
-  if (r.status === 'new') return r;
   res.setHeader('Set-Cookie', sessionCookie(r.token, r.expires));
   return { ok: true, status: 'ok', token: r.token };
 }, { public: true });
