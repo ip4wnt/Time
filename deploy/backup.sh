@@ -69,11 +69,16 @@ fi
 # контрольное сравнение числа записей: в живой базе и в дампе
 if [[ -n "$SU_PSQL" ]]; then
   LIVE="$($SU_PSQL -Atc 'SELECT count(*) FROM events' 2>/dev/null || echo '')"
-  INDUMP="$(sudo -u postgres pg_restore --data-only --table=events -f - "$DEST/db.dump" 2>/dev/null | grep -c '^[0-9]' || true)"
+  # читаем дамп от текущего пользователя (root): файл лежит в домашнем каталоге,
+  # куда у postgres обычно нет доступа, а подключение к базе для этого не нужно
+  INDUMP="$(pg_restore --data-only --table=events -f - "$DEST/db.dump" 2> "$DEST/pg_restore.err" | grep -c '^[0-9]' || true)"
   if [[ -n "$LIVE" && "$LIVE" != "$INDUMP" ]]; then
-    say "Записей в базе — $LIVE, в дампе — $INDUMP. Дамп неполный, проверьте права и политики."
+    say "Записей в базе — $LIVE, в дампе — $INDUMP."
+    [[ -s "$DEST/pg_restore.err" ]] && sed 's/^/   /' "$DEST/pg_restore.err"
+    say "Проверьте права на файл дампа и политики; сама копия лежит в $DEST"
     exit 1
   fi
+  rm -f "$DEST/pg_restore.err"
   [[ -n "$LIVE" ]] && say "   записей events: $LIVE — совпадает с дампом"
 fi
 say "   db.dump — $(size "$DEST/db.dump")"
