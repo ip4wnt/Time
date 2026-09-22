@@ -26,16 +26,16 @@ function sessionCookie(token, expires) {
 function clearCookie() { return cookieHeader(COOKIE, '', { maxAge: 0, secure: config.secureCookies }); }
 
 // ---------------- auth ----------------
-router.add('POST', '/api/auth/start', async ({ body, req }) => auth.start(body.login, req.ip), { public: true });
-router.add('POST', '/api/auth/answer', async ({ body, req, res }) => {
-  const s = await auth.answer(need(body.challenge, 'Нет challenge'), body.answers || {}, req);
-  res.setHeader('Set-Cookie', sessionCookie(s.token, s.expires));
-  return { ok: true, token: s.token };
+router.add('POST', '/api/auth/login', async ({ body, req, res }) => {
+  const r = await auth.login(body.login, body.password, req);
+  if (r.status === 'new') return r;
+  res.setHeader('Set-Cookie', sessionCookie(r.token, r.expires));
+  return { ok: true, status: 'ok', token: r.token };
 }, { public: true });
 router.add('POST', '/api/auth/register', async ({ body, req, res }) => {
-  const s = await auth.register(body.login, body.questions, req);
-  res.setHeader('Set-Cookie', sessionCookie(s.token, s.expires));
-  return { ok: true, token: s.token };
+  const r = await auth.register(body.login, body.password, req);
+  res.setHeader('Set-Cookie', sessionCookie(r.token, r.expires));
+  return { ok: true, status: 'ok', token: r.token };
 }, { public: true });
 router.add('POST', '/api/auth/logout', async ({ req, res }) => {
   await auth.destroySession(req.sessionToken);
@@ -44,12 +44,11 @@ router.add('POST', '/api/auth/logout', async ({ req, res }) => {
 }, { public: true });
 
 router.add('GET', '/api/me', async ({ user }) => {
-  const q = await db.query('SELECT id, question FROM security_questions WHERE user_id=$1 ORDER BY position, id', [user.id]);
   const s = await db.query('SELECT created_at, last_seen, ip, user_agent FROM sessions WHERE user_id=$1 ORDER BY last_seen DESC LIMIT 10', [user.id]);
   const a = await db.query('SELECT ip, ok, created_at FROM login_attempts WHERE login_norm=$1 ORDER BY created_at DESC LIMIT 10', [auth.normalizeLogin(user.login)]);
-  return { user: { id: user.id, login: user.login, created_at: user.created_at, settings: user.settings }, questions: q.rows, sessions: s.rows, attempts: a.rows };
+  return { user: { id: user.id, login: user.login, created_at: user.created_at, settings: user.settings }, sessions: s.rows, attempts: a.rows };
 });
-router.add('PUT', '/api/me/questions', async ({ user, body }) => { await auth.updateQuestions(user.id, body.questions); return { ok: true }; });
+router.add('PUT', '/api/me/password', async ({ user, body }) => { await auth.changePassword(user.id, body.current, body.next); return { ok: true }; });
 router.add('PUT', '/api/me/settings', async ({ user, body }) => {
   const settings = body.settings && typeof body.settings === 'object' ? body.settings : {};
   await db.query('UPDATE users SET settings = settings || $2::jsonb WHERE id=$1', [user.id, JSON.stringify(settings)]);

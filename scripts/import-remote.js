@@ -25,44 +25,25 @@ async function api(base, path, { method = 'GET', body, token } = {}) {
   return data;
 }
 
-// Сервер отдаёт вопросы в случайном порядке, поэтому ответы сопоставляем по тексту вопроса.
-// Ответ задаётся как "часть-вопроса=ответ", например "лампочк=106" и "5+0=5890".
-function parseAnswerSpecs(specs) {
-  return specs.map((raw) => {
-    const i = raw.indexOf('=');
-    if (i < 1) throw new Error(`Ответ нужно задавать как "часть-вопроса=ответ", получено: ${raw}`);
-    return { match: raw.slice(0, i).trim().toLowerCase(), answer: raw.slice(i + 1) };
-  });
-}
-
-async function login(base, loginName, specs) {
-  const start = await api(base, '/api/auth/start', { method: 'POST', body: { login: loginName } });
-  if (start.status !== 'known') throw new Error(`Пользователь «${loginName}» на сервере не найден — создайте его через scripts/create-user.js`);
-  const map = {};
-  for (const q of start.questions) {
-    const text = String(q.question).toLowerCase();
-    const hit = specs.filter((s) => text.includes(s.match));
-    if (hit.length !== 1) throw new Error(`Не удалось однозначно сопоставить ответ с вопросом «${q.question}» (подошло вариантов: ${hit.length})`);
-    map[q.id] = hit[0].answer;
-  }
-  if (Object.keys(map).length !== start.questions.length) throw new Error('Ответы найдены не для всех вопросов');
-  return (await api(base, '/api/auth/answer', { method: 'POST', body: { challenge: start.challenge, answers: map } })).token;
+async function login(base, loginName, password) {
+  const r = await api(base, '/api/auth/login', { method: 'POST', body: { login: loginName, password } });
+  if (r.status !== 'ok' || !r.token) throw new Error(`Не удалось войти как «${loginName}» — проверьте логин и пароль`);
+  return r.token;
 }
 
 async function main() {
-  const [base0, loginName, file, ...specsRaw] = process.argv.slice(2);
-  if (!base0 || !loginName || !file || specsRaw.length < 1) {
-    console.error('Использование: node scripts/import-remote.js <базовый-URL> <логин> <backup.json> "часть-вопроса=ответ" "часть-вопроса=ответ"');
+  const [base0, loginName, file, password] = process.argv.slice(2);
+  if (!base0 || !loginName || !file || !password) {
+    console.error('Использование: node scripts/import-remote.js <базовый-URL> <логин> <backup.json> <пароль>');
     process.exit(1);
   }
-  const specs = parseAnswerSpecs(specsRaw);
   const base = base0.replace(/\/+$/, '');
   const data = JSON.parse(fs.readFileSync(file, 'utf8'));
   const { events, colors, stats } = parseLegacy(data);
   console.log(`В выгрузке: событий-занятий ${stats.activityEvents} (с текстом ${stats.withText}), часов ${stats.hours}, задач ${stats.tasks}`);
 
   console.log(`Вход на ${base} как «${loginName}»`);
-  const token = await login(base, loginName, specs);
+  const token = await login(base, loginName, password);
 
   // занятия: сопоставляем по названию, недостающие создаём
   const boot = await api(base, '/api/bootstrap', { token });

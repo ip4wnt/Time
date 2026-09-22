@@ -1,4 +1,4 @@
-// Страница «профиль»: контрольные вопросы, норма калорий, сессии.
+// Страница «профиль»: пароль, норма калорий, сессии.
 import { get, put, post, setToken } from '../api.js';
 import { state, esc, kcalNorm } from '../state.js';
 import { h, header, toast, confirm } from '../ui.js';
@@ -12,17 +12,25 @@ export async function renderMe() {
 
   page.appendChild(h(`<h2 class="h">${esc(me.user.login)}</h2><p class="p">с нами с ${new Date(me.user.created_at).toLocaleDateString('ru-RU')}</p>`));
 
-  // --- контрольные вопросы
-  page.appendChild(h('<h2 class="h">контрольные вопросы</h2><p class="p">чтобы сменить, введите оба вопроса и новые ответы. Ответы хранятся только в виде хэша, поэтому старые показать нельзя.</p>'));
-  const qf = h(`<div class="form">
-    ${[0, 1].map((i) => `<label>вопрос ${i + 1}<input class="field" data-q="${i}" value="${esc(me.questions[i]?.question || '')}" maxlength="300"></label><label>ответ ${i + 1}<input class="field" data-a="${i}" placeholder="новый ответ" autocomplete="off" maxlength="200"></label>`).join('')}
-    <div class="row" style="margin-top:.6rem"><button class="btn small" data-act="saveq">сохранить вопросы</button></div></div>`);
-  qf.querySelector('[data-act=saveq]').onclick = async () => {
-    const questions = [0, 1].map((i) => ({ question: qf.querySelector(`[data-q="${i}"]`).value.trim(), answer: qf.querySelector(`[data-a="${i}"]`).value.trim() }));
-    if (questions.some((q) => !q.question || !q.answer)) { toast('Заполните оба вопроса и оба ответа'); return; }
-    try { await put('/api/me/questions', { questions }); toast('вопросы обновлены'); qf.querySelectorAll('[data-a]').forEach((i) => { i.value = ''; }); } catch (e) { toast(e.message); }
+  // --- пароль
+  page.appendChild(h('<h2 class="h">пароль</h2>'));
+  page.appendChild(h('<p class="p">пароль хранится только в виде хэша, поэтому показать старый нельзя — введите его вручную.</p>'));
+  const pf = h(`<div class="form">
+    <label>текущий пароль<input class="field" type="password" data-p="cur" autocomplete="current-password" maxlength="200"></label>
+    <label>новый пароль<input class="field" type="password" data-p="new" autocomplete="new-password" maxlength="200"></label>
+    <label>новый пароль ещё раз<input class="field" type="password" data-p="new2" autocomplete="new-password" maxlength="200"></label>
+    <div class="row" style="margin-top:.6rem"><button class="btn small" data-act="savep">сменить пароль</button></div></div>`);
+  pf.querySelector('[data-act=savep]').onclick = async () => {
+    const v = (k) => pf.querySelector(`[data-p="${k}"]`).value;
+    if (v('new').length < 6) { toast('Пароль короче шести знаков'); return; }
+    if (v('new') !== v('new2')) { toast('Новые пароли не совпали'); return; }
+    try {
+      await put('/api/me/password', { current: v('cur'), next: v('new') });
+      toast('пароль изменён');
+      pf.querySelectorAll('[data-p]').forEach((i) => { i.value = ''; });
+    } catch (e) { toast(e.message); }
   };
-  page.appendChild(qf);
+  page.appendChild(pf);
 
   // --- настройки
   page.appendChild(h('<h2 class="h">настройки</h2>'));

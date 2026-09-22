@@ -1,6 +1,6 @@
 'use strict';
-// Авторизация без пароля: имя + два контрольных вопроса, придуманных пользователем.
-// Ответы хранятся только как scrypt-хэши, сессии — как SHA-256 от токена.
+// Авторизация: логин + пароль. Пароль хранится только как scrypt-хэш,
+// сессии — как SHA-256 от токена.
 const crypto = require('node:crypto');
 const db = require('./db');
 const config = require('./config');
@@ -12,23 +12,25 @@ function normalizeLogin(s) {
   return String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-// Ответ сравнивается без учёта регистра, лишних пробелов и знаков препинания по краям
-function normalizeAnswer(s) {
-  return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/[.!?,;:]+$/g, '').replace(/ё/g, 'е');
-}
-
-function hashAnswer(answer) {
+function hashPassword(password) {
   const salt = crypto.randomBytes(16);
-  const hash = crypto.scryptSync(normalizeAnswer(answer), salt, 32, SCRYPT_OPTS);
+  const hash = crypto.scryptSync(String(password), salt, 32, SCRYPT_OPTS);
   return `scrypt$${salt.toString('hex')}$${hash.toString('hex')}`;
 }
 
-function verifyAnswer(answer, stored) {
-  const [algo, saltHex, hashHex] = String(stored).split('$');
-  if (algo !== 'scrypt') return false;
-  const hash = crypto.scryptSync(normalizeAnswer(answer), Buffer.from(saltHex, 'hex'), 32, SCRYPT_OPTS);
+function verifyPassword(password, stored) {
+  const [algo, saltHex, hashHex] = String(stored || '').split('$');
+  if (algo !== 'scrypt' || !saltHex || !hashHex) return false;
+  const hash = crypto.scryptSync(String(password), Buffer.from(saltHex, 'hex'), 32, SCRYPT_OPTS);
   const expected = Buffer.from(hashHex, 'hex');
   return hash.length === expected.length && crypto.timingSafeEqual(hash, expected);
+}
+
+function validatePassword(password) {
+  const p = String(password || '');
+  if (p.length < 6) throw new HttpError(400, 'Пароль короче шести знаков');
+  if (p.length > 200) throw new HttpError(400, 'Слишком длинный пароль');
+  return p;
 }
 
 function sha256(s) {
@@ -82,90 +84,63 @@ async function logAttempt(login, ip, ok) {
   await db.query('INSERT INTO login_attempts(login_norm, ip, ok) VALUES ($1,$2,$3)', [login, ip, ok]);
 }
 
-// ---- challenge: имя введено, ждём ответы на вопросы ----
-const challenges = new Map(); // id -> { userId, questionIds, ip, expires }
-const CHALLENGE_TTL = 5 * 60 * 1000;
-
-function cleanupChallenges() {
-  const now = Date.now();
-  for (const [k, v] of challenges) if (v.expires < now) challenges.delete(k);
-}
-setInterval(cleanupChallenges, 60 * 1000).unref();
-
-function shuffle(arr) {
-  const a = arr.slice();
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = crypto.randomInt(i + 1);
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-// Шаг 1: имя. Известный пользователь -> вопросы в случайном порядке. Неизвестный -> регистрация.
-async function start(login, ip) {
-  await checkRateLimit(ip);
-  const norm = normalizeLogin(login);
-  if (!norm || norm.length > 64) throw new HttpError(400, 'Введите имя');
-  const u = await db.query('SELECT id, login FROM users WHERE login_norm = $1', [norm]);
-  if (!u.rowCount) return { status: 'new', login: String(login).trim() };
-  const userId = u.rows[0].id;
-  const qs = await db.query('SELECT id, question FROM security_questions WHERE user_id = $1 ORDER BY position, id', [userId]);
-  const picked = shuffle(qs.rows).slice(0, 2);
-  const id = crypto.randomBytes(18).toString('base64url');
-  challenges.set(id, { userId, questionIds: picked.map((q) => q.id), ip, expires: Date.now() + CHALLENGE_TTL });
-  return { status: 'known', login: u.rows[0].login, challenge: id, questions: picked.map((q) => ({ id: q.id, question: q.question })) };
-}
-
-// Шаг 2: ответы
-async function answer(challengeId, answers, req) {
+// ---- вход ----
+// Шаг 1: логин + пароль. Незнакомый логин -> клиент предлагает регистрацию.
+async function login(loginRaw, password, req) {
   await checkRateLimit(req.ip);
-  const ch = challenges.get(challengeId);
-  if (!ch || ch.expires < Date.now()) throw new HttpError(400, 'Сессия входа устарела, начните заново');
-  const qs = await db.query('SELECT id, answer_hash FROM security_questions WHERE user_id = $1 AND id = ANY($2::bigint[])', [ch.userId, ch.questionIds]);
-  const u = await db.query('SELECT login_norm FROM users WHERE id = $1', [ch.userId]);
-  let ok = qs.rowCount === ch.questionIds.length && qs.rowCount > 0;
-  for (const q of qs.rows) {
-    const a = answers && answers[String(q.id)];
-    if (!a || !verifyAnswer(a, q.answer_hash)) ok = false;
-  }
-  await logAttempt(u.rows[0]?.login_norm || null, req.ip, ok);
-  if (!ok) throw new HttpError(401, 'Ответы не совпали');
-  challenges.delete(challengeId);
-  return createSession(ch.userId, req);
+  const norm = normalizeLogin(loginRaw);
+  if (!norm || norm.length > 64) throw new HttpError(400, 'Введите логин');
+  const u = await db.query('SELECT id, login, password_hash FROM users WHERE login_norm = $1', [norm]);
+  if (!u.rowCount) return { status: 'new', login: String(loginRaw).trim() };
+  const row = u.rows[0];
+  if (!row.password_hash) throw new HttpError(409, 'У этого логина пароль ещё не задан');
+  const ok = verifyPassword(password, row.password_hash);
+  await logAttempt(norm, req.ip, ok);
+  if (!ok) throw new HttpError(401, 'Неверный логин или пароль');
+  const s = await createSession(row.id, req);
+  return { status: 'ok', ...s };
 }
 
-function validateQuestions(questions) {
-  if (!Array.isArray(questions) || questions.length !== 2) throw new HttpError(400, 'Нужно ровно два вопроса');
-  for (const q of questions) {
-    if (!q || !String(q.question || '').trim() || !String(q.answer || '').trim()) throw new HttpError(400, 'Заполните вопросы и ответы');
-    if (String(q.question).length > 300 || String(q.answer).length > 200) throw new HttpError(400, 'Слишком длинный текст');
-  }
-}
-
-// Регистрация: имя + 2 вопроса с ответами
-async function createUser(login, questions) {
-  const norm = normalizeLogin(login);
-  if (!norm || norm.length > 64) throw new HttpError(400, 'Введите имя');
-  validateQuestions(questions);
+// Регистрация: логин + пароль
+async function createUser(loginRaw, password) {
+  const norm = normalizeLogin(loginRaw);
+  if (!norm || norm.length > 64) throw new HttpError(400, 'Введите логин');
+  validatePassword(password);
   const exists = await db.query('SELECT 1 FROM users WHERE login_norm = $1', [norm]);
-  if (exists.rowCount) throw new HttpError(409, 'Это имя уже занято');
+  if (exists.rowCount) throw new HttpError(409, 'Этот логин уже занят');
   return db.tx(async (c) => {
-    const u = await c.query('INSERT INTO users(login, login_norm) VALUES ($1,$2) RETURNING id', [String(login).trim(), norm]);
+    const u = await c.query('INSERT INTO users(login, login_norm, password_hash) VALUES ($1,$2,$3) RETURNING id',
+      [String(loginRaw).trim(), norm, hashPassword(password)]);
     const id = u.rows[0].id;
-    let pos = 0;
-    for (const q of questions) {
-      await c.query('INSERT INTO security_questions(user_id, position, question, answer_hash) VALUES ($1,$2,$3,$4)', [id, pos++, String(q.question).trim(), hashAnswer(q.answer)]);
-    }
     await seedDefaults(c, id);
     return id;
   });
 }
 
-async function register(login, questions, req) {
+async function register(loginRaw, password, req) {
   await checkRateLimit(req.ip);
-  const userId = await createUser(login, questions);
-  await logAttempt(normalizeLogin(login), req.ip, true);
-  return createSession(userId, req);
+  const userId = await createUser(loginRaw, password);
+  await logAttempt(normalizeLogin(loginRaw), req.ip, true);
+  const s = await createSession(userId, req);
+  return { status: 'ok', ...s };
+}
+
+// Смена пароля в разделе «профиль»
+async function changePassword(userId, current, next) {
+  const u = await db.query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+  if (!u.rowCount) throw new HttpError(404, 'Пользователь не найден');
+  const stored = u.rows[0].password_hash;
+  if (stored && !verifyPassword(current, stored)) throw new HttpError(401, 'Текущий пароль неверный');
+  validatePassword(next);
+  await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hashPassword(next), userId]);
+}
+
+async function setPassword(loginRaw, password) {
+  validatePassword(password);
+  const norm = normalizeLogin(loginRaw);
+  const r = await db.query('UPDATE users SET password_hash = $1 WHERE login_norm = $2 RETURNING id', [hashPassword(password), norm]);
+  if (!r.rowCount) throw new HttpError(404, 'Пользователь не найден');
+  return r.rows[0].id;
 }
 
 const DEFAULT_ACTIVITIES = [
@@ -187,37 +162,8 @@ async function seedDefaults(c, userId) {
   }
 }
 
-// Смена вопросов в разделе «я»: questions = [{id?, question, answer?}] — без answer хэш не меняется
-async function updateQuestions(userId, questions) {
-  if (!Array.isArray(questions) || questions.length < 2) throw new HttpError(400, 'Нужно минимум два вопроса');
-  await db.tx(async (c) => {
-    const keep = [];
-    let pos = 0;
-    for (const q of questions) {
-      const text = String(q.question || '').trim();
-      if (!text) throw new HttpError(400, 'Пустой вопрос');
-      if (q.id) {
-        const r = await c.query('SELECT id FROM security_questions WHERE id = $1 AND user_id = $2', [q.id, userId]);
-        if (!r.rowCount) throw new HttpError(404, 'Вопрос не найден');
-        if (q.answer && String(q.answer).trim()) {
-          await c.query('UPDATE security_questions SET question=$1, answer_hash=$2, position=$3 WHERE id=$4', [text, hashAnswer(q.answer), pos, q.id]);
-        } else {
-          await c.query('UPDATE security_questions SET question=$1, position=$2 WHERE id=$3', [text, pos, q.id]);
-        }
-        keep.push(q.id);
-      } else {
-        if (!q.answer || !String(q.answer).trim()) throw new HttpError(400, 'Для нового вопроса нужен ответ');
-        const r = await c.query('INSERT INTO security_questions(user_id, position, question, answer_hash) VALUES ($1,$2,$3,$4) RETURNING id', [userId, pos, text, hashAnswer(q.answer)]);
-        keep.push(r.rows[0].id);
-      }
-      pos++;
-    }
-    await c.query('DELETE FROM security_questions WHERE user_id = $1 AND NOT (id = ANY($2::bigint[]))', [userId, keep]);
-  });
-}
-
 module.exports = {
-  createUser,
-  normalizeLogin, hashAnswer, verifyAnswer, createSession, getSessionUser, destroySession,
-  start, answer, register, updateQuestions, seedDefaults, DEFAULT_ACTIVITIES,
+  createUser, setPassword, changePassword,
+  normalizeLogin, hashPassword, verifyPassword, createSession, getSessionUser, destroySession,
+  login, register, seedDefaults, DEFAULT_ACTIVITIES,
 };

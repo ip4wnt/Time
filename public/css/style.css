@@ -419,17 +419,21 @@ p.p { color: var(--muted); margin: .6rem 0; font-size: 1.6rem; }
 .toast { position: fixed; left: 50%; bottom: 3rem; transform: translateX(-50%); z-index: 70; background: var(--panel); color: var(--num); padding: 1.2rem 2rem; font-size: 1.6rem; max-width: 90vw; }
 
 /* ---------- авторизация ---------- */
-.auth { position: fixed; inset: 0; z-index: 30; background: #000 url('../img/auth-bg.jpg') center / cover no-repeat; display: flex; justify-content: center; overflow-y: auto; }
-.auth-in { width: 100%; max-width: 60.3rem; padding: 12rem 2.5rem 4rem; display: flex; flex-direction: column; align-items: center; }
-.auth-logo { width: 39.3rem; max-width: 80%; height: auto; margin-bottom: 8rem; filter: drop-shadow(0 0 2rem rgba(0,0,0,.8)); }
-.auth-card { width: 100%; background: rgba(0,0,0,.8); padding: 5rem 4rem; display: flex; flex-direction: column; align-items: center; gap: 2.4rem; }
-.auth-card .q { color: var(--text); text-align: center; font-size: 2rem; line-height: 1.4; white-space: pre-wrap; }
-.auth-card .field { width: 100%; max-width: 33rem; text-align: center; }
-.auth-card .btn { min-width: 17.7rem; }
-.auth-card .err { text-align: center; }
-.auth-card .qa { width: 100%; display: flex; flex-direction: column; gap: 1rem; align-items: center; }
-.auth-card .qa .field { text-align: left; }
-.auth-card .hint { color: var(--muted); font-size: 1.5rem; text-align: center; }
+.auth { position: fixed; inset: 0; z-index: 30; background: #000 url('../img/auth-bg2.jpg') center / cover no-repeat; display: flex; justify-content: center; overflow-y: auto; }
+.auth::before { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, #0C2421 0%, #174A5B 45.9%, #000 100%); opacity: .5; pointer-events: none; }
+.auth-in { position: relative; width: 100%; max-width: 60.3rem; padding: 8.2rem 2.5rem 6rem; display: flex; flex-direction: column; align-items: center; }
+.auth-title { font-size: 8.8rem; font-weight: 700; line-height: 1.15; color: #fff; text-align: center; }
+.auth-body { width: 100%; display: flex; flex-direction: column; align-items: center; }
+.auth-note { margin-top: 4rem; color: #fff; font-size: 1.8rem; line-height: 1.4; text-align: center; white-space: pre-wrap; }
+.auth-form { margin-top: 6.6rem; display: grid; grid-template-columns: auto 24.34rem; column-gap: 1.5rem; row-gap: 1.46rem; align-items: center; justify-content: center; }
+.auth-note + .auth-form { margin-top: 3.4rem; }
+.auth-form label { color: #fff; font-size: 1.8rem; text-align: right; white-space: nowrap; }
+.auth-form input { width: 100%; height: 5.8rem; background: #000; border: 0; padding: 0 1.6rem; color: #fff; font-family: inherit; font-size: 1.8rem; text-align: center; outline: none; }
+.auth-form input:focus { outline: .15rem solid #3d6a72; }
+.auth-act { grid-column: 2; display: flex; justify-content: center; margin-top: 2rem; }
+.auth-btn { width: 12.99rem; height: 5.8rem; background: #000; color: #fff; font-family: inherit; font-size: 1.8rem; }
+.auth-err { min-height: 2.6rem; margin-top: 1.6rem; color: #ff8a80; font-size: 1.6rem; text-align: center; }
+.auth-link { color: rgba(255,255,255,.65); font-size: 1.6rem; text-decoration: underline; }
 
 /* ---------- поиск ---------- */
 .search-in { display: flex; gap: 1rem; margin-top: 1rem; }
