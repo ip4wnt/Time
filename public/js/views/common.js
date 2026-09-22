@@ -240,7 +240,7 @@ export function filterButton(onChange) {
 }
 
 export function sumLine(key, text, { done = false, files = 0, onClick, prefix = '' } = {}) {
-  const el = h(`<button class="sum-line"><span class="k">${esc(key)}</span><span class="t ${done ? 'done' : ''}">${prefix}${esc(text)}</span>${files ? `<span class="files">${I.paperclip}${files}</span>` : ''}</button>`);
+  const el = h(`<button class="sum-line"><span class="k">${esc(key)}</span><span class="t ${done ? 'done' : ''}">${done ? `<span class="done-ck">${I.checkBold}</span>` : ''}${prefix}${esc(text)}</span>${files ? `<span class="files">${I.paperclip}${files}</span>` : ''}</button>`);
   if (onClick) el.onclick = onClick;
   return el;
 }

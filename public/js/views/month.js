@@ -91,7 +91,8 @@ export async function renderMonth(ym, query = {}) {
     const k = dayKcal(evs);
     if (k) out.food = { html: `<b>${k.kcal}</b>${icon('apple')}`, style: k.kcal > norm ? ROW_OVER : ROW_UNDER };
     if (tc) { const v = dayCounterValue(evs, tc.id); if (v !== null) out.counter = { html: `<b>${v}</b>${icon('timer')}`, style: ROW_NEUTRAL }; }
-    const tasks = evs.filter((e) => e.kind === 'task');
+    // в индикаторе дня считаем только незавершённые задачи
+    const tasks = evs.filter((e) => e.kind === 'task' && !e.done);
     if (tasks.length) out.task = { html: `<b>${tasks.length}</b>${icon('checkBox')}`, style: ROW_NEUTRAL };
     const th = evs.filter((e) => e.kind === 'thought').slice(0, 4);
     if (th.length) out.thought = { html: th.map((e) => `<span class="ri" style="color:${MOOD_COLOR[e.mood || 'neutral']}">${I[MOOD_ICON[e.mood || 'neutral']]}</span>`).join(''), style: ROW_NEUTRAL };

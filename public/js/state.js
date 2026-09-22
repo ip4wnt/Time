@@ -132,7 +132,7 @@ export async function loadMonth(ym) {
   const days = daysInMonth(ym);
   // с запасом: сетка месяца показывает соседние дни
   const from = addDays(`${ym}-01`, -7), to = addDays(`${ym}-${pad(days)}`, 14);
-  const r = await get(`/api/events?from=${from}&to=${to}`);
+  const r = await get(`/api/events?from=${from}&to=${to}&today=${todayStr()}`);
   state.events.set(ym, r.events);
   return r.events;
 }

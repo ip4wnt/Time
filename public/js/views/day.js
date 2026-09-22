@@ -120,7 +120,8 @@ export async function renderDay(day, query = {}) {
     }
     const th = slot.all.filter((e) => e.kind === 'thought').slice(0, 4);
     if (th.length) out.thought = { html: th.map((e) => `<span class="ri" style="color:${MOOD_COLOR[e.mood || 'neutral']}">${I[MOOD_ICON[e.mood || 'neutral']]}</span>`).join(''), style: ROW_NEUTRAL };
-    const tk = taskHours[hr] || [];
+    // в индикаторе часа считаем только незавершённые задачи
+    const tk = (taskHours[hr] || []).filter((e) => !e.done);
     if (tk.length) out.task = { html: `<b>${tk.length}</b>${icon('checkBox')}`, style: ROW_NEUTRAL };
     return out; // задачи без часа остаются только в сводке дня
   }
@@ -146,10 +147,11 @@ export async function renderDay(day, query = {}) {
 
   function drawActivities() {
     const box = h('<div class="summary"></div>');
-    const list = evs.filter((e) => e.kind !== 'task' && !(e.kind === 'activity' && isSleepEvent(e) && !(e.text || '').trim()))
+    // по умолчанию в сводке только занятия; остальные виды добавляются фильтрами
+    const list = evs.filter((e) => e.kind === 'activity' && !(isSleepEvent(e) && !(e.text || '').trim()))
       .sort((a, b) => (a.hours[0] - b.hours[0]) || (a.position - b.position));
     for (const e of list) box.appendChild(sumLine(hoursLabel(e.hours), labelFor(e), { files: (e.files || []).length, prefix: prefixFor(e), onClick: () => openEvent(e) }));
-    if (!list.length) box.appendChild(h('<p class="p">в этот день пока ничего не записано — нажмите на час, чтобы добавить запись</p>'));
+    if (!list.length) box.appendChild(h('<p class="p">в этот день пока нет занятий — нажмите на час, чтобы добавить запись</p>'));
     page.appendChild(box);
   }
 

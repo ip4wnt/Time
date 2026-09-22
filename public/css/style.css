@@ -164,7 +164,9 @@ svg { display: block; }
 .sum-line { display: flex; gap: 1rem; align-items: baseline; text-align: left; color: var(--text); font-size: 1.8rem; line-height: 1.35; }
 .sum-line .k { color: var(--muted); flex: none; }
 .sum-line .t { white-space: pre-wrap; word-break: break-word; }
-.sum-line .t.done { text-decoration: line-through; color: var(--muted); }
+.sum-line .t.done { color: var(--muted); }
+.sum-line .done-ck { display: inline-block; width: 1.8rem; height: 1.4rem; margin-right: .8rem; color: #4CAF50; vertical-align: middle; }
+.sum-line .done-ck svg { width: 100%; height: 100%; display: block; }
 .sum-line .files { color: var(--muted); font-size: 1.5rem; }
 .sum-line .files svg { width: 1.6rem; height: 1.6rem; display: inline-block; vertical-align: middle; }
 .sum-head { margin-top: 3rem; font-size: 2.2rem; color: var(--text); display: flex; gap: 3rem; }

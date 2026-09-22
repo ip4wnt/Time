@@ -167,8 +167,22 @@ async function eventsInRange(userId, from, to) {
   return r.rows.map((e) => { e.files = byEvent[e.id] || []; return fmtEvent(e); });
 }
 
+// Незавершённые задачи прошлых месяцев переносятся на первый день текущего месяца.
+// today приходит от клиента, чтобы месяц считался по часовому поясу устройства.
+const carriedFor = new Map();
+async function carryTasks(userId, today) {
+  if (!isDate(today)) return;
+  const first = `${today.slice(0, 7)}-01`;
+  if (carriedFor.get(userId) === first) return;
+  carriedFor.set(userId, first);
+  await db.query(`UPDATE events SET day=$2, days=ARRAY[$2::date], hours=NULL, updated_at=now()
+      WHERE user_id=$1 AND kind='task' AND done=false AND days IS NOT NULL
+        AND (SELECT max(d) FROM unnest(days) d) < $2::date`, [userId, first]);
+}
+
 router.add('GET', '/api/events', async ({ user, query }) => {
   if (!isDate(query.from) || !isDate(query.to)) throw new HttpError(400, 'from/to в формате YYYY-MM-DD');
+  if (query.today) await carryTasks(user.id, query.today);
   return { events: await eventsInRange(user.id, query.from, query.to) };
 });
 
