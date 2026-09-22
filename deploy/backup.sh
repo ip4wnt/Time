@@ -29,22 +29,53 @@ say() { printf '%s\n' "$*"; }
 size() { du -h "$1" 2>/dev/null | cut -f1; }
 
 # ---- 1. база ----
+# Снимаем дамп от суперпользователя postgres: таблицы закрыты политиками RLS
+# (FORCE ROW LEVEL SECURITY), и pg_dump от имени роли приложения вернёт ошибку.
 say "== база $DB_NAME"
 DB_URL=""
 if [[ -r "$ENV_FILE" ]]; then
   DB_URL="$(sed -n 's/^[[:space:]]*DATABASE_URL[[:space:]]*=[[:space:]]*//p' "$ENV_FILE" | tail -1 | tr -d '"'"'"'')"
 fi
-if [[ -n "$DB_URL" ]]; then
-  pg_dump -Fc "$DB_URL" > "$DEST/db.dump"
-elif [[ $EUID -eq 0 ]] && id -u postgres >/dev/null 2>&1; then
+SU_PSQL=""
+if [[ $EUID -eq 0 ]] && id -u postgres >/dev/null 2>&1; then
   sudo -u postgres pg_dump -Fc "$DB_NAME" > "$DEST/db.dump"
+  SU_PSQL="sudo -u postgres psql -d $DB_NAME"
+elif [[ -n "$DB_URL" ]]; then
+  say "   postgres недоступен, пробую подключение из $ENV_FILE"
+  if ! pg_dump -Fc "$DB_URL" > "$DEST/db.dump" 2> "$DEST/pg_dump.err"; then
+    say "Дамп не удался:"
+    sed 's/^/   /' "$DEST/pg_dump.err"
+    say "Скорее всего это RLS: роль приложения не может читать закрытые таблицы целиком."
+    say "Запустите скрипт через sudo, чтобы дамп снимался от имени postgres."
+    exit 1
+  fi
+  rm -f "$DEST/pg_dump.err"
 else
-  say "Не удалось определить подключение к базе: нет доступа к $ENV_FILE и нет прав postgres."
+  say "Не удалось определить подключение к базе: нет прав postgres и нет доступа к $ENV_FILE."
   say "Запустите через sudo или задайте ENV_FILE=/путь/.env"
   exit 1
 fi
 # дамп должен читаться — иначе это не бэкап
 pg_restore -l "$DEST/db.dump" > /dev/null
+# и в нём должны быть данные всех закрытых политиками таблиц, а не пустые секции
+MISSING=""
+for t in activities tags counters events important_dates notes files; do
+  pg_restore -l "$DEST/db.dump" | grep -q "TABLE DATA public $t " || MISSING="$MISSING $t"
+done
+if [[ -n "$MISSING" ]]; then
+  say "В дампе нет данных таблиц:$MISSING — это неполный бэкап, разбирайтесь до того, как он понадобится."
+  exit 1
+fi
+# контрольное сравнение числа записей: в живой базе и в дампе
+if [[ -n "$SU_PSQL" ]]; then
+  LIVE="$($SU_PSQL -Atc 'SELECT count(*) FROM events' 2>/dev/null || echo '')"
+  INDUMP="$(sudo -u postgres pg_restore --data-only --table=events -f - "$DEST/db.dump" 2>/dev/null | grep -c '^[0-9]' || true)"
+  if [[ -n "$LIVE" && "$LIVE" != "$INDUMP" ]]; then
+    say "Записей в базе — $LIVE, в дампе — $INDUMP. Дамп неполный, проверьте права и политики."
+    exit 1
+  fi
+  [[ -n "$LIVE" ]] && say "   записей events: $LIVE — совпадает с дампом"
+fi
 say "   db.dump — $(size "$DEST/db.dump")"
 
 # ---- 2. файлы ----

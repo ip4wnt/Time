@@ -39,7 +39,7 @@ sudo -u postgres pg_restore -c -d chronum db.dump
 
 ```bash
 pg_restore -l db.dump                                   # что внутри дампа
-pg_restore -d chronum -t events db.dump                 # только одна таблица
+sudo -u postgres pg_restore -d chronum -t events db.dump # только одна таблица
 sha256sum -c sha256.txt                                 # проверить целостность копии
 ```
 
@@ -50,5 +50,13 @@ sha256sum -c sha256.txt                                 # проверить ц�
 ```bash
 sudo -u postgres psql -qc "ALTER ROLE chronum PASSWORD 'пароль_из_env';"
 ```
+
+## Почему всё через `sudo -u postgres`
+
+Таблицы с данными закрыты политиками RLS в режиме `FORCE ROW LEVEL SECURITY`, поэтому роль
+приложения `chronum` не может ни выгрузить, ни залить их целиком: `pg_dump` и `pg_restore`
+от её имени завершатся ошибкой «query would be affected by row-level security policy».
+Бэкап и восстановление делаются от суперпользователя `postgres` — политики его не касаются.
+Скрипт `backup.sh` это учитывает сам и дополнительно сверяет число записей в базе и в дампе.
 
 Схема при старте сервера подтягивается сама (`server/db.js` применяет `sql/schema.sql`), так что после восстановления дополнительных миграций не нужно.
