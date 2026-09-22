@@ -48,6 +48,8 @@ export function monthTitle(ym) { const [y, m] = ym.split('-').map(Number); retur
 export function dayTitle(s) { const d = parseDate(s); return { dom: d.getDate(), mon: MONTHS_SHORT[d.getMonth()], year: String(d.getFullYear()).slice(2) }; }
 // «16 сентября» — для шапки представления «день»
 export function dayLabel(s) { const d = parseDate(s); return `${d.getDate()} ${MONTHS_GEN[d.getMonth()]}`; }
+// формат шапки экранов добавления: «21.09.26»
+export function dotDate(s) { const d = parseDate(s); return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getFullYear()).slice(2)}`; }
 export function humanDate(s) { const d = parseDate(s); return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`; }
 
 // "1,3-5,9" из массива чисел

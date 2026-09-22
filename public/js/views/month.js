@@ -34,6 +34,8 @@ export async function renderMonth(ym, query = {}) {
   const today = todayStr();
   const tc = topCounter();
   const norm = kcalNorm();
+  // выбор дней для новой задачи (кнопка в конце блока задач)
+  let pickDays = null;
 
   function draw() {
     page.innerHTML = '';
@@ -47,10 +49,29 @@ export async function renderMonth(ym, query = {}) {
       const cell = h(`<button class="cell ${info.inMonth ? '' : 'out'} ${info.date === today ? 'today' : ''}" style="--rows:${rows}" data-day="${info.date}">${html}</button>`);
       const a = dominantActivity(evs);
       if (a) { cell.style.background = grad(a.color); cell.classList.add('colored'); }
-      cell.onclick = () => { state.day = info.date; location.hash = `#/day/${info.date}`; };
+      if (pickDays && pickDays.has(info.date)) cell.classList.add('selected');
+      cell.onclick = () => {
+        if (pickDays) {
+          if (pickDays.has(info.date)) pickDays.delete(info.date); else pickDays.add(info.date);
+          draw();
+          return;
+        }
+        state.day = info.date; location.hash = `#/day/${info.date}`;
+      };
       g.appendChild(cell);
     }
     page.appendChild(g);
+    document.querySelectorAll('.selbar').forEach((b) => b.remove());
+    if (pickDays) {
+      const bar = h(`<div class="selbar"><button class="btn ghost" data-act="cancel">отменить</button><button class="btn" data-act="add" ${pickDays.size ? '' : 'disabled'}>добавить задачу</button></div>`);
+      bar.querySelector('[data-act=cancel]').onclick = () => { pickDays = null; draw(); };
+      bar.querySelector('[data-act=add]').onclick = () => {
+        const days = [...pickDays].sort().join(',');
+        location.hash = `#/add?days=${days}&kind=task&back=${encodeURIComponent(`#/month/${ym}`)}`;
+      };
+      document.body.appendChild(bar);
+      return;
+    }
     page.appendChild(filtersBar(() => draw()));
 
     drawActivitySummary();
@@ -191,6 +212,9 @@ export async function renderMonth(ym, query = {}) {
       box.appendChild(line);
     }
     if (!tasks.length) box.appendChild(h('<p class="p">задач на этот месяц нет</p>'));
+    const addBtn = h(`<button class="newtask">${I.plus}<span>новая задача</span></button>`);
+    addBtn.onclick = () => { pickDays = new Set(); draw(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+    box.appendChild(addBtn);
     page.appendChild(box);
   }
 
@@ -215,7 +239,7 @@ export async function renderMonth(ym, query = {}) {
   }
 
   draw();
-  return () => { document.body.classList.remove('bg-month'); };
+  return () => { document.querySelectorAll('.selbar').forEach((b) => b.remove()); document.body.classList.remove('bg-month'); };
 }
 
 function hasRun(hours, n) {

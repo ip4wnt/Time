@@ -2,18 +2,22 @@
 import { I, KIND_ICON, KIND_LABEL, MOOD_ICON } from '../icons.js';
 import { get, post, put, del, upload, fileUrl } from '../api.js';
 import {
-  state, loadDay, loadMonth, ymOf, hoursLabel, hoursRange, humanDate, rangesLabel, activeActivities, activity, tag, esc, saveBatch,
-  fmtSize, isLight, MOOD_COLOR, todayStr, invalidateEvents, MONTHS_SHORT, parseDate,
+  state, loadDay, loadMonth, ymOf, hoursLabel, hoursRange, humanDate, dotDate, rangesLabel, activeActivities, activity, tag, esc, saveBatch,
+  fmtSize, isLight, grad, MOOD_COLOR, todayStr, invalidateEvents, MONTHS_SHORT, parseDate,
 } from '../state.js';
 import { h, header, toast, dialog, prompt, confirm } from '../ui.js';
+import { selHeader, secTitle, daysPicker, hoursPicker } from './common.js';
 
 const KIND_TITLE = { activity: 'занятие', food: 'еду', task: 'задачу', thought: 'мысль', counter: 'счётчик' };
+// названия блоков в том же порядке, что и фильтры
+const SEC_TITLE = { activity: 'Занятие', task: 'Задача', food: 'Еда', counter: 'Счетчик', thought: 'Мысли' };
+const PLACEHOLDER = { activity: 'чем занимались?', task: 'что за задача' };
 
 export async function renderAdd(q) {
   const app = document.getElementById('app');
   const back = q.back ? decodeURIComponent(q.back) : (q.day ? `#/day/${q.day}` : '#/month');
   const isTaskSel = !!q.days;
-  const day = q.day || (q.days ? q.days.split(',')[0] : todayStr());
+  let day = q.day || (q.days ? q.days.split(',')[0] : todayStr());
   const hours = q.hours ? q.hours.split(',').map(Number).filter((n) => n >= 0 && n < 24) : [];
   const days = q.days ? q.days.split(',').filter(Boolean) : [];
   const editId = q.edit ? Number(q.edit) : null;
@@ -38,9 +42,9 @@ export async function renderAdd(q) {
     const set = new Set(hours);
     for (const e of dayEvents) if (e.kind !== 'task' && e.hours.some((x) => set.has(x))) entries.push(fromEvent(e));
   }
-  const selHours = hours.length ? hours : (entries[0]?.hours || []);
+  let selHours = hours.length ? hours : (entries[0]?.hours || []);
   // у записей-не-задач поле days пустое, поэтому нужен именно непустой список
-  const selDays = days.length ? days : (entries[0]?.days?.length ? entries[0].days : [day]);
+  let selDays = days.length ? days : (entries[0]?.days?.length ? entries[0].days : [day]);
   // в режиме еды/мысли/счётчика сразу заводим новую запись этого вида (поверх уже существующих в этих часах)
   let focusNew = false;
   if (!entries.length || (!editId && kind !== 'activity' && kind !== 'task')) { entries.push(blank(kind)); focusNew = entries.length > 1; }
@@ -50,23 +54,64 @@ export async function renderAdd(q) {
   }
   function fromEvent(e) { return { ...e, hours: e.hours || [], days: e.days || [], files: e.files || [], pending: [], text: e.text || '' }; }
 
-  app.appendChild(header({ title: `${editId ? 'изменить' : 'добавить'} ${KIND_TITLE[editId ? entries[0].kind : kind] || ''}`, left: 'close', onLeft: () => { location.hash = back; }, search: false }));
+  // фон по виду записи, как в макетах
+  const bgKind = entries[0]?.kind || kind;
+  document.body.classList.add(`bg-add-${bgKind}`);
+  const hdrHost = h('<div></div>');
+  app.appendChild(hdrHost);
   const page = h('<div class="page"></div>');
   app.appendChild(page);
-  const taskWhole = (isTaskSel || entries[0].kind === 'task') && !(selDays.length === 1 && selHours.length);
-  const whenText = taskWhole
-    ? daysLabel(selDays)
-    : `${hoursRange(selHours)} <span class="muted">${humanDate(day)}</span>`;
-  page.appendChild(h(`<div class="add-when">${whenText}</div>`));
   const list = h('<div></div>');
   page.appendChild(list);
-  const bottom = h(`<div class="row"><button class="round" data-act="plus" aria-label="добавить запись">${I.plus}</button><span class="spacer"></span><button class="btn" data-act="save">сохранить</button></div><div class="kinds hidden"></div>`);
-  page.appendChild(bottom);
-  const kindsRow = h(`<div class="kinds hidden">${['activity', 'food', 'task', 'thought', 'counter'].map((k) => `<button class="fbtn" data-kind="${k}" title="${KIND_LABEL[k]}">${I[KIND_ICON[k]]}</button>`).join('')}<button class="fbtn off" disabled title="деньги">${I.ruble}</button></div>`);
-  page.appendChild(kindsRow);
-  bottom.querySelector('[data-act=plus]').onclick = () => kindsRow.classList.toggle('hidden');
-  kindsRow.addEventListener('click', (e) => { const b = e.target.closest('[data-kind]'); if (!b) return; entries.push(blank(b.dataset.kind)); kindsRow.classList.add('hidden'); draw(); list.lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
-  bottom.querySelector('[data-act=save]').onclick = save;
+  const foot = h(`<div class="add-foot"><button data-act="cancel">Отменить</button><button data-act="save">Сохранить</button></div>`);
+  page.appendChild(foot);
+  foot.querySelector('[data-act=cancel]').onclick = () => { location.hash = back; };
+  foot.querySelector('[data-act=save]').onclick = save;
+  // свернутые блоки — по индексу записи
+  const collapsed = new Set();
+
+  const isWholeTask = () => (isTaskSel || entries[0]?.kind === 'task') && !(selDays.length === 1 && selHours.length);
+
+  // шапка: крестик, диапазон времени и дата (оба меняются нажатием), поиск
+  function drawHeader() {
+    hdrHost.innerHTML = '';
+    const mid = h('<span class="when"></span>');
+    const hdr = selHeader({ mid, onClose: () => { location.hash = back; }, search: true });
+    const openPop = (btn, make) => {
+      const open = hdr.querySelector('.popover');
+      if (open) { open.remove(); return; }
+      const pop = make();
+      hdr.appendChild(pop);
+      const off = (e) => { if (!pop.contains(e.target) && !btn.contains(e.target)) { pop.remove(); document.removeEventListener('click', off); } };
+      setTimeout(() => document.addEventListener('click', off), 0);
+    };
+    if (isWholeTask()) {
+      const bD = h(`<button data-act="days">${daysLabel(selDays)}</button>`);
+      bD.onclick = () => openPop(bD, () => daysPicker(selDays, (ds) => { setDays(ds); }));
+      mid.appendChild(bD);
+    } else {
+      const bH = h(`<button data-act="hours">${hoursRange(selHours) || 'часы'}</button>`);
+      bH.onclick = () => openPop(bH, () => hoursPicker(selHours, (hs) => { setHours(hs); }));
+      const bD = h(`<button data-act="date">${dotDate(day)}</button>`);
+      bD.onclick = () => openPop(bD, () => daysPicker([day], (ds) => { setDays(ds); }));
+      mid.append(bH, h('<span class="sep">/</span>'), bD);
+    }
+    hdrHost.appendChild(hdr);
+  }
+
+  function setHours(hs) {
+    if (!hs.length) return;
+    selHours = hs;
+    for (const en of entries) en.hours = [...hs];
+    drawHeader(); draw();
+  }
+  function setDays(ds) {
+    if (!ds.length) return;
+    selDays = ds;
+    day = ds[0];
+    for (const en of entries) { en.day = ds[0]; en.days = [...ds]; }
+    drawHeader(); draw();
+  }
 
   function draw() {
     list.innerHTML = '';
@@ -75,27 +120,34 @@ export async function renderAdd(q) {
 
   function entryEl(en, i) {
     const el = h(`<section class="entry" data-i="${i}">
-      <div class="entry-head">
-        <span class="kind">${I[KIND_ICON[en.kind]]} ${KIND_LABEL[en.kind]}${i === 0 && en.kind !== 'task' && entries.length > 1 ? ' · окрашивает ячейку' : ''} ${en.hours.length && en.hours.join() !== selHours.join() ? `<span class="entry-hours">${hoursRange(en.hours)}</span>` : ''}</span>
-        <span class="entry-tools">
-          ${entries.length > 1 ? `<button data-act="up" ${i === 0 ? 'disabled' : ''} aria-label="выше">${I.up}</button><button data-act="down" ${i === entries.length - 1 ? 'disabled' : ''} aria-label="ниже">${I.down}</button>` : ''}
-          <button data-act="attach" aria-label="прикрепить файл">${I.paperclip}</button>
-          <button data-act="remove" aria-label="удалить запись">${I.trash}</button>
-        </span>
-      </div>
       <div class="entry-body"></div>
       <div class="files-list"></div>
     </section>`);
+    const isOff = collapsed.has(i);
+    el.prepend(secTitle(SEC_TITLE[en.kind] || KIND_LABEL[en.kind], {
+      collapsed: isOff,
+      onToggle: () => { if (isOff) collapsed.delete(i); else collapsed.add(i); draw(); },
+    }));
     const body = el.querySelector('.entry-body');
-    el.querySelector('[data-act=up]')?.addEventListener('click', () => { [entries[i - 1], entries[i]] = [entries[i], entries[i - 1]]; draw(); });
-    el.querySelector('[data-act=down]')?.addEventListener('click', () => { [entries[i + 1], entries[i]] = [entries[i], entries[i + 1]]; draw(); });
-    el.querySelector('[data-act=remove]').onclick = async () => {
+    if (isOff) { body.remove(); return el; }
+    const tools = h(`<div class="entry-tools big">
+      <button data-act="plus" aria-label="добавить еще">${I.plus}</button>
+      <button data-act="down" ${i === entries.length - 1 ? 'disabled' : ''} aria-label="ниже">${I.down}</button>
+      <button data-act="up" ${i === 0 ? 'disabled' : ''} aria-label="выше">${I.up}</button>
+      <button data-act="attach" aria-label="прикрепить файл">${I.paperclip}</button>
+      <button data-act="remove" aria-label="удалить запись">${I.trash}</button>
+    </div>`);
+    el.appendChild(tools);
+    tools.querySelector('[data-act=plus]').onclick = () => { entries.splice(i + 1, 0, blank(en.kind)); draw(); };
+    tools.querySelector('[data-act=up]').onclick = () => { if (i === 0) return; [entries[i - 1], entries[i]] = [entries[i], entries[i - 1]]; draw(); };
+    tools.querySelector('[data-act=down]').onclick = () => { if (i === entries.length - 1) return; [entries[i + 1], entries[i]] = [entries[i], entries[i + 1]]; draw(); };
+    tools.querySelector('[data-act=remove]').onclick = async () => {
       if (en.id) { const ok = await confirm('Удалить эту запись?', 'удалить'); if (!ok) return; removed.push(en.id); }
       entries.splice(i, 1);
       if (!entries.length) entries.push(blank(kind));
       draw();
     };
-    el.querySelector('[data-act=attach]').onclick = () => pickFiles(en, el);
+    tools.querySelector('[data-act=attach]').onclick = () => pickFiles(en, el);
     if (en.kind === 'activity') activityBody(en, body);
     else if (en.kind === 'food') foodBody(en, body);
     else if (en.kind === 'thought') thoughtBody(en, body);
@@ -105,24 +157,42 @@ export async function renderAdd(q) {
     return el;
   }
 
+  // ---- цвета занятий (общие для занятий и задач)
+  function swatches(en, redraw) {
+    const acts = activeActivities();
+    const cell = (a) => {
+      const on = en.activity_id === a.id;
+      const bg = a.is_sleep ? '#272727' : grad(a.color, 180);
+      return `<button class="swatch ${on ? 'on' : ''} ${isLight(a.color) && !a.is_sleep ? 'lt' : ''}" data-id="${a.id}" style="background:${bg}" title="${esc(a.name)}">${on ? `<span class="ck">${I.checkBold}</span>` : ''}</button>`;
+    };
+    const sw = h(`<div class="swatches">${acts.map(cell).join('')}<button class="swatch none ${!en.activity_id ? 'on' : ''}" data-id="" title="не выбрано">${!en.activity_id ? `<span class="ck">${I.checkBold}</span>` : ''}</button></div>`);
+    sw.addEventListener('click', (e) => { const b = e.target.closest('.swatch'); if (!b) return; en.activity_id = b.dataset.id ? Number(b.dataset.id) : null; en.tag_id = null; redraw(); });
+    return sw;
+  }
+
+  // ---- теги: общие для занятий и задач
+  function tagsRow(en, redraw) {
+    if (!en.activity_id) return null;
+    const tags = state.tags.filter((t) => t.activity_id === en.activity_id);
+    const tg = h(`<div class="tags plain">${tags.map((t) => `<button class="chip ${en.tag_id === t.id ? 'on' : ''}" data-id="${t.id}">${esc(t.name)}</button>`).join('')}<button class="chip edit" data-act="edit" aria-label="теги">${I.pencil}</button></div>`);
+    tg.addEventListener('click', async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.act === 'edit') { await tagEditor(en.activity_id); redraw(); return; }
+      const id = Number(b.dataset.id); en.tag_id = en.tag_id === id ? null : id; redraw();
+    });
+    return tg;
+  }
+
   // ---- занятие
   function activityBody(en, body) {
-    const acts = activeActivities();
-    const sw = h(`<div class="swatches">${acts.map((a) => `<button class="swatch ${en.activity_id === a.id ? 'on' : ''}" data-id="${a.id}" style="background:${a.color}" title="${esc(a.name)}"><span class="nm ${isLight(a.color) ? 'dk' : ''}">${esc(a.name)}</span></button>`).join('')}<button class="swatch none ${!en.activity_id ? 'on' : ''}" data-id="">не выбрано</button></div>`);
-    sw.addEventListener('click', (e) => { const b = e.target.closest('.swatch'); if (!b) return; en.activity_id = b.dataset.id ? Number(b.dataset.id) : null; en.tag_id = null; activityBody(en, body); });
+    const redraw = () => activityBody(en, body);
     body.innerHTML = '';
-    body.appendChild(sw);
-    if (en.activity_id) {
-      const tags = state.tags.filter((t) => t.activity_id === en.activity_id);
-      const tg = h(`<div class="tags">${tags.map((t) => `<button class="chip ${en.tag_id === t.id ? 'on' : ''}" data-id="${t.id}">${esc(t.name)}</button>`).join('')}<button class="chip" data-act="edit" aria-label="теги">${I.pencil}${tags.length ? '' : ' теги'}</button></div>`);
-      tg.addEventListener('click', async (e) => {
-        const b = e.target.closest('button'); if (!b) return;
-        if (b.dataset.act === 'edit') { await tagEditor(en.activity_id); activityBody(en, body); return; }
-        const id = Number(b.dataset.id); en.tag_id = en.tag_id === id ? null : id; activityBody(en, body);
-      });
-      body.appendChild(tg);
-    }
-    body.appendChild(textarea(en, 'что делали, детали…'));
+    body.appendChild(swatches(en, redraw));
+    const a = en.activity_id ? activity(en.activity_id) : null;
+    if (a) body.appendChild(h(`<div class="swatch-name">${esc(a.name)}</div>`));
+    body.appendChild(textarea(en, PLACEHOLDER.activity, 'big'));
+    const tg = tagsRow(en, redraw);
+    if (tg) body.appendChild(tg);
   }
 
   async function tagEditor(activityId) {
@@ -228,7 +298,7 @@ export async function renderAdd(q) {
   // ---- еда
   function foodBody(en, body) {
     body.innerHTML = '';
-    const ta = textarea(en, 'например: овсянка 60 г, банан, кофе с молоком 200 мл', 'short');
+    const ta = textarea(en, 'что ели: овсянка 60 г, банан, кофе с молоком 200 мл', 'big');
     ta.style.marginTop = '0';
     body.appendChild(foodAutocomplete(ta));
     const row = h(`<div class="row" style="margin-top:1.2rem"><button class="btn small" data-act="calc">посчитать</button><span class="muted" style="font-size:1.5rem">продукты через запятую или с новой строки</span></div>`);
@@ -258,7 +328,7 @@ export async function renderAdd(q) {
   // ---- мысль
   function thoughtBody(en, body) {
     body.innerHTML = '';
-    const ta = textarea(en, 'о чём думали, что чувствовали…', 'short'); ta.style.marginTop = '0';
+    const ta = textarea(en, 'о чем думали, что чувствовали?', 'big'); ta.style.marginTop = '0';
     body.appendChild(ta);
     const moods = h(`<div class="moods">${['sad', 'neutral', 'happy'].map((m) => `<button class="mood ${en.mood === m ? 'on' : ''}" data-m="${m}" style="background:${MOOD_COLOR[m]}" title="${{ sad: 'грустная', neutral: 'нейтральная', happy: 'радостная' }[m]}">${I[MOOD_ICON[m]]}</button>`).join('')}</div>`);
     moods.addEventListener('click', (e) => { const b = e.target.closest('[data-m]'); if (!b) return; en.mood = b.dataset.m; moods.querySelectorAll('.mood').forEach((x) => x.classList.toggle('on', x === b)); });
@@ -276,16 +346,17 @@ export async function renderAdd(q) {
     body.appendChild(textarea(en, 'комментарий (необязательно)', 'short'));
   }
 
-  // ---- задача
+  // ---- задача (теперь тоже с цветом и тегами)
   function taskBody(en, body) {
+    const redraw = () => taskBody(en, body);
     body.innerHTML = '';
-    const ta = textarea(en, 'что нужно сделать', 'short'); ta.style.marginTop = '0';
-    body.appendChild(ta);
-    const acts = activeActivities();
-    const sw = h(`<div class="tags"><span class="muted" style="font-size:1.5rem;margin-right:.6rem">цвет:</span>${acts.map((a) => `<button class="chip ${en.activity_id === a.id ? 'on' : ''}" data-id="${a.id}"><i class="mood-dot" style="background:${a.color};margin-right:0"></i>${esc(a.name)}</button>`).join('')}</div>`);
-    sw.addEventListener('click', (e) => { const b = e.target.closest('.chip'); if (!b) return; const id = Number(b.dataset.id); en.activity_id = en.activity_id === id ? null : id; sw.querySelectorAll('.chip').forEach((x) => x.classList.toggle('on', Number(x.dataset.id) === en.activity_id)); });
-    body.appendChild(sw);
-    const dn = h(`<label class="inline" style="margin-top:1.6rem"><input type="checkbox" class="check" ${en.done ? 'checked' : ''}> сделано</label>`);
+    body.appendChild(swatches(en, redraw));
+    const a = en.activity_id ? activity(en.activity_id) : null;
+    if (a) body.appendChild(h(`<div class="swatch-name">${esc(a.name)}</div>`));
+    body.appendChild(textarea(en, PLACEHOLDER.task, 'big'));
+    const tg = tagsRow(en, redraw);
+    if (tg) body.appendChild(tg);
+    const dn = h(`<label class="inline" style="margin-top:1.8rem"><input type="checkbox" class="check" ${en.done ? 'checked' : ''}> сделано</label>`);
     dn.querySelector('input').onchange = (e) => { en.done = e.target.checked; };
     body.appendChild(dn);
   }
@@ -338,7 +409,7 @@ export async function renderAdd(q) {
       if (!empty) { upsert.push(base); upsertEntries.push(en); }
     });
     if (!upsert.length && !removed.length) { location.hash = back; return; }
-    const btn = bottom.querySelector('[data-act=save]'); btn.disabled = true;
+    const btn = foot.querySelector('[data-act=save]'); btn.disabled = true;
     try {
       const saved = await saveBatch(upsert, removed);
       // привязываем загруженные до сохранения файлы к созданным событиям
@@ -352,8 +423,10 @@ export async function renderAdd(q) {
     } catch (e) { toast(e.message); btn.disabled = false; }
   }
 
+  drawHeader();
   draw();
   if (focusNew) { const last = list.lastElementChild; last?.scrollIntoView({ block: 'start' }); last?.querySelector('textarea, input')?.focus(); }
+  return () => { document.body.classList.remove(`bg-add-${bgKind}`); };
 }
 
 function daysLabel(days) {

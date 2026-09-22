@@ -17,6 +17,49 @@ export const FILTER_KIND = { food: 'food', counter: 'counter', task: 'task', tho
 
 export function activeFilters() { return CELL_ORDER.filter((f) => state.filters.has(f)); }
 
+// Виды записей в блоке «добавить» — порядок как в макете: занятие, задача, деньги, еда, счетчик, мысли.
+export const ADD_KINDS = [
+  { id: 'activity', icon: 'dots', title: 'занятие' },
+  { id: 'task', icon: 'list', title: 'задача' },
+  { id: 'money', icon: 'ruble', title: 'деньги', disabled: true },
+  { id: 'food', icon: 'apple', title: 'еда' },
+  { id: 'counter', icon: 'timer', title: 'счетчик' },
+  { id: 'thought', icon: 'cloud', title: 'мысли' },
+];
+
+// Заголовок блока: тонкие линии по бокам, по центру название (макеты «добавить …»).
+export function secTitle(text, { collapsed = null, onToggle = null } = {}) {
+  const el = h(`<div class="sec-title"><i class="ln"></i><span>${esc(text)}</span>${collapsed === null ? '' : `<button class="chev ${collapsed ? 'up' : ''}" aria-label="свернуть">${I.chevDown}</button>`}<i class="ln"></i></div>`);
+  const b = el.querySelector('.chev');
+  if (b && onToggle) b.onclick = onToggle;
+  return el;
+}
+
+// Блок «Добавить» под сеткой в режиме выбора часов
+export function addBlock(onPick) {
+  const el = h(`<div class="addblock"></div>`);
+  el.appendChild(secTitle('Добавить'));
+  const row = h(`<div class="icons">${ADD_KINDS.map((k) => `<button class="${k.disabled ? 'off' : ''}" data-kind="${k.id}" title="${k.title}" ${k.disabled ? 'disabled' : ''}>${I[k.icon]}</button>`).join('')}</div>`);
+  row.addEventListener('click', (e) => { const b = e.target.closest('[data-kind]'); if (!b || b.disabled) return; onPick(b.dataset.kind); });
+  el.appendChild(row);
+  return el;
+}
+
+// Шапка режима выбора/добавления: крестик слева, по центру время и дата, справа поиск
+export function selHeader({ mid, onClose, search = false }) {
+  const el = h(`<header class="hdr sel">
+    <button class="hdr-btn" data-act="close" aria-label="выйти">${I.close}</button>
+    <div class="mid"></div>
+    ${search ? `<button class="hdr-btn" data-act="search" aria-label="поиск">${I.search}</button>` : '<span class="hdr-btn"></span>'}
+  </header>`);
+  el.querySelector('[data-act=close]').onclick = onClose;
+  const s = el.querySelector('[data-act=search]');
+  if (s) s.onclick = () => { location.hash = '#/search'; };
+  const midEl = el.querySelector('.mid');
+  if (typeof mid === 'string') midEl.innerHTML = mid; else midEl.appendChild(mid);
+  return el;
+}
+
 export function filtersBar(onChange) {
   const el = h(`<div class="filters">${FILTERS.map((f) => `
     <button class="fbtn ${state.filters.has(f.id) ? 'on' : ''} ${f.disabled ? 'off' : ''}" data-filter="${f.id}" title="${f.title}" ${f.disabled ? 'disabled' : ''}>${I[f.icon]}</button>`).join('')}</div>`);
@@ -101,6 +144,55 @@ export function dayPicker(day, onPick) {
       gridEl.appendChild(b);
     }
     pop.appendChild(gridEl);
+  }
+  draw();
+  return pop;
+}
+
+// Мультивыбор дней — диапазон дат для задачи
+export function daysPicker(days, onDone) {
+  const sel = new Set(days);
+  const pop = h('<div class="popover picker"></div>');
+  let ym = ymOf(days[0] || todayStr());
+  function draw() {
+    pop.innerHTML = '';
+    const [y, m] = ym.split('-').map(Number);
+    const head = h(`<div class="pick-head"><button class="pick-nav" data-act="pm">${I.back}</button><span>${MONTHS_FULL[m - 1]} ${y}</span><button class="pick-nav" data-act="nm">${I.fwd}</button></div>`);
+    head.querySelector('[data-act=pm]').onclick = (e) => { e.stopPropagation(); ym = addMonths(ym, -1); draw(); };
+    head.querySelector('[data-act=nm]').onclick = (e) => { e.stopPropagation(); ym = addMonths(ym, 1); draw(); };
+    pop.appendChild(head);
+    pop.appendChild(h(`<div class="pick-week">${WEEKDAYS.map((w) => `<span>${w}</span>`).join('')}</div>`));
+    const gridEl = h('<div class="pick-days"></div>');
+    for (const g of monthGrid(ym)) {
+      const b = h(`<button class="${g.inMonth ? '' : 'dim'} ${sel.has(g.date) ? 'on' : ''}">${g.dom}</button>`);
+      b.onclick = (e) => { e.stopPropagation(); if (sel.has(g.date)) sel.delete(g.date); else sel.add(g.date); draw(); };
+      gridEl.appendChild(b);
+    }
+    pop.appendChild(gridEl);
+    const foot = h(`<div class="row" style="margin-top:.6rem;justify-content:flex-end"><button class="btn small" data-act="ok" ${sel.size ? '' : 'disabled'}>готово</button></div>`);
+    foot.querySelector('[data-act=ok]').onclick = (e) => { e.stopPropagation(); pop.remove(); onDone([...sel].sort()); };
+    pop.appendChild(foot);
+  }
+  draw();
+  return pop;
+}
+
+// Мультивыбор часов — куда ставится запись
+export function hoursPicker(hours, onDone) {
+  const sel = new Set(hours);
+  const pop = h('<div class="popover picker"></div>');
+  function draw() {
+    pop.innerHTML = '';
+    const g = h('<div class="hpick"></div>');
+    for (let i = 0; i < 24; i++) {
+      const b = h(`<button class="${sel.has(i) ? 'on' : ''}">${i}</button>`);
+      b.onclick = (e) => { e.stopPropagation(); if (sel.has(i)) sel.delete(i); else sel.add(i); draw(); };
+      g.appendChild(b);
+    }
+    pop.appendChild(g);
+    const foot = h(`<div class="row" style="margin-top:.6rem;justify-content:flex-end"><button class="btn small" data-act="ok" ${sel.size ? '' : 'disabled'}>готово</button></div>`);
+    foot.querySelector('[data-act=ok]').onclick = (e) => { e.stopPropagation(); pop.remove(); onDone([...sel].sort((x, y) => x - y)); };
+    pop.appendChild(foot);
   }
   draw();
   return pop;
