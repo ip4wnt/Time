@@ -11,6 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Ubuntu+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/landing.css">
+  <script src="js/landing-boot.js"></script>
 </head>
 <body>
 
@@ -27,7 +28,7 @@
   <nav class="top-nav">
     <a href="#year">Год</a>
     <a href="#what">Что&nbsp;внутри</a>
-    <a class="btn btn-ghost" href="/">Войти</a>
+    <a class="btn btn-ghost" href="/app">Войти</a>
   </nav>
 </header>
 
@@ -53,7 +54,7 @@
         <span id="ticker-text">Секунду ценит тот, кто успел затормозить. Здесь секунда&nbsp;— это один тап, которым отмечен прошедший час.</span>
       </p>
       <div class="cta">
-        <a class="btn btn-solid" href="/?reg=1">Начать вести день</a>
+        <a class="btn btn-solid" href="/app?reg=1">Начать вести день</a>
         <a class="btn btn-ghost" href="#year">Посмотреть, как это выглядит</a>
       </div>
     </div>
@@ -254,7 +255,7 @@
         Попробуйте Хронум&nbsp;— и&nbsp;ответ станет заметно ближе.
       </p>
       <div class="cta">
-        <a class="btn btn-solid" href="/?reg=1">Завести Хронум</a>
+        <a class="btn btn-solid" href="/app?reg=1">Завести Хронум</a>
       </div>
       <p class="hint">Регистрация занимает минуту. О&nbsp;тарифах сообщим заранее, без сюрпризов.</p>
     </div>
@@ -304,13 +305,9 @@
           <label for="ld-company">Компания</label>
           <input id="ld-company" name="company" maxlength="160" autocomplete="organization">
         </div>
-        <div class="lead-row">
-          <label for="ld-contact">Почта или телефон</label>
-          <input id="ld-contact" name="contact" maxlength="160" autocomplete="email">
-        </div>
-        <div class="lead-row">
-          <label for="ld-tg">Ник в&nbsp;телеграме</label>
-          <input id="ld-tg" name="telegram" maxlength="80" placeholder="@nickname">
+        <div class="lead-row lead-wide">
+          <label for="ld-contact">Как с&nbsp;вами связаться&nbsp;— как удобнее</label>
+          <input id="ld-contact" name="contact" maxlength="160" placeholder="почта, телефон или ник в телеграме">
         </div>
         <div class="lead-row lead-wide">
           <label for="ld-msg">Задача</label>

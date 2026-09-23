@@ -447,11 +447,10 @@
         name: form.name.value.trim(),
         company: form.company.value.trim(),
         contact: form.contact.value.trim(),
-        telegram: form.telegram.value.trim(),
         message: form.message.value.trim()
       };
       if (data.name.length < 2) { show('Напишите, как к\u00a0вам обращаться', true); return; }
-      if (!data.contact && !data.telegram) { show('Оставьте почту, телефон или ник в\u00a0телеграме', true); return; }
+      if (data.contact.length < 3) { show('Оставьте почту, телефон или ник в\u00a0телеграме\u00a0— как вам удобнее', true); return; }
       if (data.message.length < 5) { show('Опишите задачу хотя бы коротко', true); return; }
 
       btn.disabled = true;

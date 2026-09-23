@@ -48,6 +48,20 @@ async function handleApi(req, res, url) {
   if (result !== undefined && !res.headersSent) sendJson(res, 200, result);
 }
 
+// Какую страницу отдать на корне: приложение — вошедшим, публичную страницу — остальным.
+// /app всегда отдаёт приложение (туда ведёт переход, если сессия живёт только в localStorage).
+async function pageFor(req, url) {
+  const p = url.pathname;
+  if (p === '/app') return '/index.html';
+  if (p !== '/') return p;
+  if (url.searchParams.has('reg') || url.searchParams.has('app')) return '/index.html';
+  try {
+    const user = await auth.getSessionUser(sessionTokenFrom(req));
+    if (user) return '/index.html';
+  } catch { /* нет сессии — покажем публичную страницу */ }
+  return '/landing.html';
+}
+
 const server = http.createServer(async (req, res) => {
   const started = Date.now();
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
@@ -56,7 +70,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/')) {
       await handleApi(req, res, url);
     } else if (req.method === 'GET' || req.method === 'HEAD') {
-      serveStatic(req, res, url.pathname === '/' ? '/index.html' : url.pathname);
+      serveStatic(req, res, await pageFor(req, url));
     } else {
       sendJson(res, 405, { error: 'Метод не поддерживается' });
     }
