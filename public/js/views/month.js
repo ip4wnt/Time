@@ -8,7 +8,7 @@ import {
 import { h, toast } from '../ui.js';
 import { put } from '../api.js';
 import {
-  calHeader, monthPicker, filtersBar, activeFilters, cellRows, filterButton, sumLine, sumSep,
+  calHeader, monthPicker, filtersBar, activeFilters, cellRows, filterButton, sumLine, sumSep, hiddenInSummary,
   ROW_NEUTRAL, ROW_OVER, ROW_UNDER,
 } from './common.js';
 
@@ -36,10 +36,15 @@ export async function renderMonth(ym, query = {}) {
   const norm = kcalNorm();
   // выбор дней для новой задачи (кнопка в конце блока задач)
   let pickDays = null;
+  // на десктопе слева календарь с фильтрами, справа сводка; на телефоне колонки идут друг под другом
+  let colL = null; let colR = null;
 
   function draw() {
     page.innerHTML = '';
-    page.appendChild(h(`<div class="weekdays">${WEEKDAYS.map((w) => `<span>${w}</span>`).join('')}</div>`));
+    const cols = h('<div class="cal-cols"></div>');
+    colL = h('<div class="cal-l"></div>'); colR = h('<div class="cal-r"></div>');
+    cols.append(colL, colR); page.appendChild(cols);
+    colL.appendChild(h(`<div class="weekdays">${WEEKDAYS.map((w) => `<span>${w}</span>`).join('')}</div>`));
     const g = h('<div class="grid grid-month"></div>');
     for (const info of grid) {
       const evs = perDay.get(info.date);
@@ -60,7 +65,7 @@ export async function renderMonth(ym, query = {}) {
       };
       g.appendChild(cell);
     }
-    page.appendChild(g);
+    colL.appendChild(g);
     document.querySelectorAll('.selbar').forEach((b) => b.remove());
     if (pickDays) {
       const bar = h(`<div class="selbar"><button class="btn ghost" data-act="cancel">отменить</button><button class="btn" data-act="add" ${pickDays.size ? '' : 'disabled'}>добавить задачу</button></div>`);
@@ -72,11 +77,11 @@ export async function renderMonth(ym, query = {}) {
       document.body.appendChild(bar);
       return;
     }
-    page.appendChild(filtersBar(() => draw()));
+    colL.appendChild(filtersBar(() => draw()));
 
     drawActivitySummary();
     for (const f of activeFilters()) {
-      page.appendChild(sumSep());
+      colR.appendChild(sumSep());
       if (f === 'food') drawFoodSummary();
       else if (f === 'counter') drawCounterSummary();
       else if (f === 'task') drawTasksSummary();
@@ -107,6 +112,7 @@ export async function renderMonth(ym, query = {}) {
       if (!g.inMonth) continue;
       for (const e of perDay.get(g.date)) {
         if (e.kind !== 'activity' || isSleepEvent(e)) continue;
+        if (hiddenInSummary(e)) continue;
         if (!hasRun(e.hours || [], 3)) continue;
         const key = `${e.activity_id}|${e.tag_id || ''}|${(e.text || '').trim()}`;
         if (!groups.has(key)) groups.set(key, { e, days: [], files: 0 });
@@ -120,15 +126,15 @@ export async function renderMonth(ym, query = {}) {
       const text = (gr.e.text || '').trim() || [a && a.name, tg && tg.name].filter(Boolean).join(' · ');
       box.appendChild(sumLine(rangesLabel(gr.days), text, { files: gr.files, onClick: () => openEvent(gr.e) }));
     }
-    if (!list.length) box.appendChild(h('<p class="p">в этом месяце пока нет занятий от трёх часов подряд</p>'));
-    page.appendChild(box);
+    if (!list.length) box.appendChild(h(`<p class="p">${state.hiddenActivities.size ? 'по выбранным занятиям в этом месяце ничего нет' : 'в этом месяце пока нет занятий от трёх часов подряд'}</p>`));
+    colR.appendChild(box);
   }
 
   function drawInfographic() {
     const bar = h('<div class="infobar"></div>');
     bar.appendChild(filterButton(() => draw()));
     bar.appendChild(h(`<span class="muted" style="font-size:1.5rem">${state.sort === 'weight' ? 'по весу' : 'по времени'}${state.hiddenKinds.size ? ` · скрыто: ${state.hiddenKinds.size}` : ''}</span>`));
-    page.appendChild(bar);
+    colR.appendChild(bar);
     const items = [];
     for (const g of grid) {
       if (!g.inMonth) continue;
@@ -159,7 +165,7 @@ export async function renderMonth(ym, query = {}) {
       else dots.appendChild(h(`<span class="dk">${I[KIND_ICON[it.kind]]}</span>`));
     }
     if (!ordered.length) dots.appendChild(h('<span class="muted" style="grid-column:1/-1;font-size:1.5rem">пусто</span>'));
-    page.appendChild(dots);
+    colR.appendChild(dots);
   }
 
   function drawFoodSummary() {
@@ -174,7 +180,7 @@ export async function renderMonth(ym, query = {}) {
       box.appendChild(line);
     }
     if (!any) box.appendChild(h('<p class="p">записей о еде в этом месяце нет</p>'));
-    page.appendChild(box);
+    colR.appendChild(box);
   }
 
   function drawCounterSummary() {
@@ -189,7 +195,7 @@ export async function renderMonth(ym, query = {}) {
       box.appendChild(sumLine(c ? c.name : 'счётчик', `${Math.round(sum * 100) / 100}${c && c.unit ? ` ${c.unit}` : ''} в этом месяце`));
     }
     if (!sums.size) box.appendChild(h('<p class="p">записей счётчиков в этом месяце нет</p>'));
-    page.appendChild(box);
+    colR.appendChild(box);
   }
 
   function drawTasksSummary() {
@@ -197,7 +203,7 @@ export async function renderMonth(ym, query = {}) {
     const seen = new Set();
     for (const g of grid) for (const e of perDay.get(g.date)) if (e.kind === 'task' && !seen.has(e.id) && (e.days || []).some((d) => d.startsWith(ym))) { seen.add(e.id); tasks.push(e); }
     const done = tasks.filter((t) => t.done).length;
-    page.appendChild(h(`<div class="sum-head"><span><b>${tasks.length}</b> запланировано</span><span><b>${done}</b> сделано</span></div><div class="progress"><i style="width:${tasks.length ? Math.round(done / tasks.length * 100) : 0}%"></i></div>`));
+    colR.appendChild(h(`<div class="sum-head"><span><b>${tasks.length}</b> запланировано</span><span><b>${done}</b> сделано</span></div><div class="progress"><i style="width:${tasks.length ? Math.round(done / tasks.length * 100) : 0}%"></i></div>`));
     const box = h('<div class="summary"></div>');
     tasks.sort((a, b) => (a.done - b.done) || (a.days[0] < b.days[0] ? -1 : 1) || (a.position - b.position));
     for (const t of tasks) {
@@ -216,7 +222,7 @@ export async function renderMonth(ym, query = {}) {
     const addBtn = h(`<button class="newtask">${I.plus}<span>новая задача</span></button>`);
     addBtn.onclick = () => { pickDays = new Set(); draw(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
     box.appendChild(addBtn);
-    page.appendChild(box);
+    colR.appendChild(box);
   }
 
   function drawThoughtsSummary() {
@@ -230,7 +236,7 @@ export async function renderMonth(ym, query = {}) {
       }
     }
     if (!any) box.appendChild(h('<p class="p">мыслей в этом месяце нет</p>'));
-    page.appendChild(box);
+    colR.appendChild(box);
   }
 
   function openEvent(e, backTo) {

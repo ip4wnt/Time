@@ -7,7 +7,7 @@ import {
 import { h, toast } from '../ui.js';
 import { put } from '../api.js';
 import {
-  calHeader, dayPicker, filtersBar, activeFilters, cellRows, filterButton, sumLine, sumSep,
+  calHeader, dayPicker, filtersBar, activeFilters, cellRows, filterButton, sumLine, sumSep, hiddenInSummary,
   addBlock, selHeader, ROW_NEUTRAL,
 } from './common.js';
 
@@ -24,6 +24,8 @@ export async function renderDay(day, query = {}) {
   app.appendChild(page);
   // режим выбора часов: остается только сетка и блок «добавить»
   let selMode = false;
+  // на десктопе слева часы с фильтрами, справа сводка дня
+  let colL = null; let colR = null;
 
   const [evs] = await Promise.all([loadDay(day), loadDates().catch(() => null)]);
   const hm = hourMap(evs);
@@ -63,6 +65,9 @@ export async function renderDay(day, query = {}) {
     document.body.classList.toggle('bg-day', !selMode);
     drawHeader();
     page.innerHTML = '';
+    const cols = h('<div class="cal-cols"></div>');
+    colL = h('<div class="cal-l"></div>'); colR = h('<div class="cal-r"></div>');
+    cols.append(colL, colR); page.appendChild(cols);
     const g = h('<div class="grid grid-day"></div>');
     for (let hr = 0; hr < 24; hr++) {
       const slot = hm[hr];
@@ -81,9 +86,9 @@ export async function renderDay(day, query = {}) {
       };
       g.appendChild(cell);
     }
-    page.appendChild(g);
+    colL.appendChild(g);
     if (selMode) {
-      page.appendChild(addBlock((kind) => {
+      colL.appendChild(addBlock((kind) => {
         const back = encodeURIComponent(`#/day/${day}`);
         const hrs = selectedHours().join(',');
         location.hash = kind === 'task'
@@ -92,11 +97,11 @@ export async function renderDay(day, query = {}) {
       }));
       return;
     }
-    page.appendChild(filtersBar(() => draw()));
+    colL.appendChild(filtersBar(() => draw()));
 
     drawActivities();
     for (const f of activeFilters()) {
-      page.appendChild(sumSep());
+      colR.appendChild(sumSep());
       if (f === 'food') drawFood();
       else if (f === 'counter') drawCounters();
       else if (f === 'task') drawTasks();
@@ -148,17 +153,17 @@ export async function renderDay(day, query = {}) {
   function drawActivities() {
     const box = h('<div class="summary"></div>');
     // по умолчанию в сводке только занятия; остальные виды добавляются фильтрами
-    const list = evs.filter((e) => e.kind === 'activity' && !(isSleepEvent(e) && !(e.text || '').trim()))
+    const list = evs.filter((e) => e.kind === 'activity' && !hiddenInSummary(e) && !(isSleepEvent(e) && !(e.text || '').trim()))
       .sort((a, b) => (a.hours[0] - b.hours[0]) || (a.position - b.position));
     for (const e of list) box.appendChild(sumLine(hoursLabel(e.hours), labelFor(e), { files: (e.files || []).length, prefix: prefixFor(e), onClick: () => openEvent(e) }));
-    if (!list.length) box.appendChild(h('<p class="p">в этот день пока нет занятий — нажмите на час, чтобы добавить запись</p>'));
-    page.appendChild(box);
+    if (!list.length) box.appendChild(h(`<p class="p">${state.hiddenActivities.size ? 'по выбранным занятиям в этот день ничего нет' : 'в этот день пока нет занятий\u00a0— нажмите на час, чтобы добавить запись'}</p>`));
+    colR.appendChild(box);
   }
 
   function drawGraph() {
     const bar = h('<div class="infobar"></div>');
     bar.appendChild(filterButton(() => draw()));
-    page.appendChild(bar);
+    colR.appendChild(bar);
     const gEl = h('<div class="daygraph"></div>');
     for (let hr = 0; hr < 24; hr++) {
       const col = h(`<div class="col ${hr > 0 && hr % 6 === 0 ? 'sep' : ''}"></div>`);
@@ -177,20 +182,20 @@ export async function renderDay(day, query = {}) {
       col.innerHTML = shown.join('') + (marks.length > 8 ? `<span class="more">+${marks.length - 8}</span>` : '');
       gEl.appendChild(col);
     }
-    page.appendChild(gEl);
+    colR.appendChild(gEl);
   }
 
   function drawFood() {
     const k = dayKcal(evs);
     if (k) {
       const diff = Math.round(k.kcal - norm);
-      page.appendChild(h(`<div class="sum-head"><span><b>${k.kcal}</b> ккал</span><span class="muted">${diff >= 0 ? '+' : ''}${diff} к норме</span></div><div class="progress"><i style="width:${Math.min(100, Math.round(k.kcal / norm * 100))}%;background:${foodHeat(k.kcal)}"></i></div><p class="p">белки ${k.protein} · жиры ${k.fat} · углеводы ${k.carbs}</p>`));
+      colR.appendChild(h(`<div class="sum-head"><span><b>${k.kcal}</b> ккал</span><span class="muted">${diff >= 0 ? '+' : ''}${diff} к норме</span></div><div class="progress"><i style="width:${Math.min(100, Math.round(k.kcal / norm * 100))}%;background:${foodHeat(k.kcal)}"></i></div><p class="p">белки ${k.protein} · жиры ${k.fat} · углеводы ${k.carbs}</p>`));
     }
     const box = h('<div class="summary"></div>');
     const list = evs.filter((e) => e.kind === 'food').sort((a, b) => a.hours[0] - b.hours[0]);
     for (const e of list) box.appendChild(sumLine(hoursLabel(e.hours), labelFor(e), { files: (e.files || []).length, onClick: () => openEvent(e) }));
     if (!list.length) box.appendChild(h('<p class="p">еды в этот день не записано</p>'));
-    page.appendChild(box);
+    colR.appendChild(box);
   }
 
   function drawCounters() {
@@ -202,7 +207,7 @@ export async function renderDay(day, query = {}) {
       box.appendChild(sumLine(c ? c.name : 'счётчик', `${Math.round(sum * 100) / 100}${c && c.unit ? ` ${c.unit}` : ''} за день`));
     }
     if (!sums.size) box.appendChild(h('<p class="p">записей счётчиков в этот день нет</p>'));
-    page.appendChild(box);
+    colR.appendChild(box);
   }
 
   function drawThoughts() {
@@ -210,12 +215,12 @@ export async function renderDay(day, query = {}) {
     const list = evs.filter((e) => e.kind === 'thought').sort((a, b) => a.hours[0] - b.hours[0]);
     for (const e of list) box.appendChild(sumLine(hoursLabel(e.hours), e.text || '', { prefix: prefixFor(e), onClick: () => openEvent(e) }));
     if (!list.length) box.appendChild(h('<p class="p">мыслей в этот день нет</p>'));
-    page.appendChild(box);
+    colR.appendChild(box);
   }
 
   function drawTasks() {
     const done = tasks.filter((t) => t.done).length;
-    page.appendChild(h(`<div class="sum-head"><span><b>${tasks.length}</b> запланировано</span><span><b>${done}</b> сделано</span></div><div class="progress"><i style="width:${tasks.length ? Math.round(done / tasks.length * 100) : 0}%"></i></div>`));
+    colR.appendChild(h(`<div class="sum-head"><span><b>${tasks.length}</b> запланировано</span><span><b>${done}</b> сделано</span></div><div class="progress"><i style="width:${tasks.length ? Math.round(done / tasks.length * 100) : 0}%"></i></div>`));
     const box = h('<div class="summary"></div>');
     for (const tk of [...tasks].sort((a, b) => (a.done - b.done) || (a.position - b.position))) {
       const when = tk.days.length > 1 ? `${tk.days.length} дн.` : (tk.hours && tk.hours.length ? hoursLabel(tk.hours) : '·');
@@ -227,7 +232,7 @@ export async function renderDay(day, query = {}) {
     const addBtn = h('<button class="btn ghost wide">новая задача на этот день</button>');
     addBtn.onclick = () => { location.hash = `#/add?days=${day}&kind=task&back=${encodeURIComponent(`#/day/${day}`)}`; };
     box.appendChild(addBtn);
-    page.appendChild(box);
+    colR.appendChild(box);
   }
 
   draw();

@@ -458,3 +458,22 @@ p.p { color: var(--muted); margin: .6rem 0; font-size: 1.6rem; }
 @media (min-width: 700px) {
   .selbar { left: 50%; right: auto; width: 60.3rem; transform: translateX(-50%); }
 }
+
+/* ---------- фильтр занятий ---------- */
+.fbtn-wrap { position: relative; display: inline-block; }
+/* открывается вверх: полоса фильтров стоит внизу колонки календаря */
+.pop-acts { left: 0; bottom: 7.2rem; max-height: 52rem; overflow-y: auto; padding-bottom: 0; }
+.pop-acts .seg { position: sticky; bottom: 0; background: #0a0a0a; padding: 1rem 0 1.4rem; margin-top: .4rem; }
+.pop-acts .pop-head { color: var(--muted); font-size: 1.5rem; }
+.pop-acts label { cursor: pointer; }
+.pop-acts .mood-dot { flex: none; margin: 0; }
+
+/* ---------- десктоп: календарь и фильтры слева, сводка справа ---------- */
+@media (min-width: 1100px) {
+  /* широкая раскладка только на календарных экранах — остальные остаются одной колонкой */
+  body.bg-month .app, body.bg-day .app, body.bg-hours .app { max-width: 132rem; }
+  .page.cal { padding: 0 3rem; }
+  .cal-cols { display: grid; grid-template-columns: 60.3rem minmax(34rem, 1fr); column-gap: 5rem; align-items: start; }
+  .cal-l { position: sticky; top: 1.4rem; }
+  .cal-r > .summary:first-child, .cal-r > .sum-head:first-child, .cal-r > .infobar:first-child { margin-top: 0; }
+}

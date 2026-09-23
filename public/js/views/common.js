@@ -1,6 +1,6 @@
 // Общие блоки календарных экранов: шапка-крошки, фильтры, выбор даты, строки саммари.
 import { I, KIND_ICON } from '../icons.js';
-import { state, savePrefs, esc, KINDS, MONTHS_FULL, monthGrid, todayStr, ymOf, addMonths, WEEKDAYS } from '../state.js';
+import { state, savePrefs, esc, KINDS, MONTHS_FULL, monthGrid, todayStr, ymOf, addMonths, WEEKDAYS, activeActivities } from '../state.js';
 import { h } from '../ui.js';
 
 // Порядок кнопок-фильтров под сеткой — как в макете.
@@ -60,9 +60,47 @@ export function selHeader({ mid, onClose, search = false }) {
   return el;
 }
 
+// Фильтр занятий: какие занятия показывать в сводке. Живёт в общей полосе фильтров.
+export function activityFilter(onChange) {
+  const list = activeActivities();
+  const hid = list.filter((a) => state.hiddenActivities.has(a.id)).length;
+  const wrap = h(`<div class="fbtn-wrap"><button class="fbtn ${hid ? 'on' : ''}" aria-label="занятия в сводке" title="занятия в сводке">${I.dots}</button></div>`);
+  const btn = wrap.querySelector('button');
+  btn.onclick = () => {
+    const open = wrap.querySelector('.popover'); if (open) { open.remove(); return; }
+    const pop = h(`<div class="popover pop-acts">
+      <div class="pop-head">занятия в сводке</div>
+      ${list.length ? list.map((a) => `<label><input type="checkbox" class="check" data-act-id="${a.id}" ${state.hiddenActivities.has(a.id) ? '' : 'checked'}> <i class="mood-dot" style="background:${a.color}"></i> ${esc(a.name)}</label>`).join('')
+        : '<p class="p">занятий пока нет</p>'}
+      ${list.length ? '<div class="seg"><button data-all="on">все</button><button data-all="off">ни одного</button></div>' : ''}
+    </div>`);
+    pop.addEventListener('change', (e) => {
+      const id = e.target.dataset.actId; if (!id) return;
+      if (e.target.checked) state.hiddenActivities.delete(Number(id)); else state.hiddenActivities.add(Number(id));
+      savePrefs(); onChange();
+    });
+    pop.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-all]'); if (!b) return;
+      if (b.dataset.all === 'on') state.hiddenActivities.clear();
+      else for (const a of list) state.hiddenActivities.add(a.id);
+      savePrefs(); onChange();
+    });
+    wrap.appendChild(pop);
+    const off = (e) => { if (!wrap.contains(e.target)) { pop.remove(); document.removeEventListener('click', off); } };
+    setTimeout(() => document.addEventListener('click', off), 0);
+  };
+  return wrap;
+}
+
+// Скрыто ли занятие этой записи в сводке
+export function hiddenInSummary(e) {
+  return e && e.kind === 'activity' && e.activity_id != null && state.hiddenActivities.has(Number(e.activity_id));
+}
+
 export function filtersBar(onChange) {
   const el = h(`<div class="filters">${FILTERS.map((f) => `
     <button class="fbtn ${state.filters.has(f.id) ? 'on' : ''} ${f.disabled ? 'off' : ''}" data-filter="${f.id}" title="${f.title}" ${f.disabled ? 'disabled' : ''}>${I[f.icon]}</button>`).join('')}</div>`);
+  el.insertBefore(activityFilter(onChange), el.firstChild);
   el.addEventListener('click', (e) => {
     const b = e.target.closest('[data-filter]'); if (!b || b.disabled) return;
     const id = b.dataset.filter;

@@ -19,6 +19,7 @@ export const state = {
   home: 'month',      // домашнее представление: month | day
   sort: 'weight',     // weight | chrono
   hiddenKinds: new Set(),
+  hiddenActivities: new Set(), // id занятий, скрытых в сводке
   month: null,        // 'YYYY-MM'
   day: null,          // 'YYYY-MM-DD' — последний выбранный/просмотренный день
   selection: new Set(),
@@ -222,10 +223,11 @@ export function loadPrefs() {
     if (p.home === 'day' || p.home === 'month') state.home = p.home;
     if (Array.isArray(p.filters)) state.filters = new Set(p.filters);
     if (Array.isArray(p.hiddenKinds)) state.hiddenKinds = new Set(p.hiddenKinds);
+    if (Array.isArray(p.hiddenActivities)) state.hiddenActivities = new Set(p.hiddenActivities.map(Number));
   } catch { /* ignore */ }
 }
 export function savePrefs() {
-  try { localStorage.setItem('chronum_prefs', JSON.stringify({ sort: state.sort, home: state.home, filters: [...state.filters], hiddenKinds: [...state.hiddenKinds] })); } catch { /* ignore */ }
+  try { localStorage.setItem('chronum_prefs', JSON.stringify({ sort: state.sort, home: state.home, filters: [...state.filters], hiddenKinds: [...state.hiddenKinds], hiddenActivities: [...state.hiddenActivities] })); } catch { /* ignore */ }
 }
 
 // ---------- утилиты ----------
