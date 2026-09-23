@@ -72,6 +72,7 @@ export function renderAuth(root) {
       (login ? form.password : form.login).focus();
     }
 
-    stepLogin();
+    // с публичной страницы можно прийти сразу на регистрацию: /?reg=1
+    if (/[?&]reg=1\b/.test(location.search)) stepRegister(); else stepLogin();
   });
 }

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#000000">
   <title>ХРОНУМ — дневник времени</title>
-  <meta name="description" content="Хронум — дневник времени: часы, дни и месяцы вашей жизни в одной сетке. Видно, куда уходит день и сколько времени остаётся.">
+  <meta name="description" content="Хронум — дневник времени: часы, дни и месяцы в одной сетке. Учёт тренировок, калорий, сна, задач и важных дат — управлять можно тем, что видно.">
   <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -25,7 +25,7 @@
     <span class="brand-name">ХРОНУМ</span>
   </a>
   <nav class="top-nav">
-    <a href="#life">Сколько&nbsp;осталось</a>
+    <a href="#year">Год</a>
     <a href="#what">Что&nbsp;внутри</a>
     <a class="btn btn-ghost" href="/">Войти</a>
   </nav>
@@ -39,58 +39,68 @@
     <div class="hero-in">
       <p class="eyebrow">дневник времени</p>
       <h1>
-        Время нельзя вернуть.<br>
-        <span class="accent">Можно только заметить.</span>
+        Управлять можно тем, что&nbsp;видно.<br>
+        <span class="accent">Хронум делает время видимым.</span>
       </h1>
       <p class="lead">
-        Хронум показывает вашу жизнь так, как она устроена на&nbsp;самом деле:
-        часами, днями и&nbsp;месяцами в&nbsp;одной сетке. Каждая клетка&nbsp;— отрезок,
-        который уже потрачен или ещё нет.
+        Отмечайте, чем занят час: работа, тренировка, сон, еда, дорога,
+        вечер с&nbsp;семьёй. Из&nbsp;клеток складывается картина дня, месяца
+        и&nbsp;года&nbsp;— и&nbsp;сразу понятно, где время работает на&nbsp;вас,
+        а&nbsp;где просто утекает.
       </p>
       <p class="ticker" id="ticker" aria-live="off">
-        Вы&nbsp;на&nbsp;этой странице <b id="ticker-time">0&nbsp;с</b>. Этого отрезка больше нет.
+        <b id="ticker-time">0&nbsp;с</b>
+        <span id="ticker-text">Секунду ценит тот, кто успел затормозить. Здесь секунда&nbsp;— это один тап, которым отмечен прошедший час.</span>
       </p>
       <div class="cta">
-        <a class="btn btn-solid" href="/">Начать вести день</a>
-        <a class="btn btn-ghost" href="#life">Посмотреть, сколько осталось</a>
+        <a class="btn btn-solid" href="/?reg=1">Начать вести день</a>
+        <a class="btn btn-ghost" href="#year">Посмотреть, как это выглядит</a>
       </div>
     </div>
     <div class="hero-foot">
-      <span class="hint">один квадрат&nbsp;— один час чьей-то жизни</span>
+      <span class="hint">один квадрат&nbsp;— один час вашей жизни</span>
     </div>
   </section>
 
-  <!-- ─────────────── сетка жизни ─────────────── -->
-  <section class="life reveal" id="life">
+  <!-- ─────────────── год как на ладони ─────────────── -->
+  <section class="year reveal" id="year">
     <div class="wrap">
-      <p class="eyebrow">арифметика без утешений</p>
-      <h2>Жизнь целиком укладывается в&nbsp;одну сетку</h2>
+      <p class="eyebrow">год как на&nbsp;ладони</p>
+      <h2>Год&nbsp;— это 365 дней. Почувствуйте возможности каждого дня</h2>
       <p class="text">
-        Восемьдесят лет&nbsp;— это 4&nbsp;160 недель. Не&nbsp;абстрактная вечность,
-        а&nbsp;сетка, которая целиком видна на&nbsp;одном экране. Укажите год рождения
-        и&nbsp;посмотрите, где вы&nbsp;сейчас.
+        Год кажется большим, пока не&nbsp;разложен. В&nbsp;сетке ниже&nbsp;— один
+        прожитый год с&nbsp;обычной жизнью: работа, сон, дорога, быт.
+        И&nbsp;всё&nbsp;же в&nbsp;нём нашлось место почти всему, что человек себе
+        планировал.
       </p>
 
-      <div class="life-ctl">
-        <label for="birth">Год рождения</label>
-        <input id="birth" type="number" min="1930" max="2026" step="1" value="1988" inputmode="numeric">
-        <input id="birth-range" type="range" min="1930" max="2026" step="1" value="1988" aria-label="Год рождения, ползунок">
+      <div class="year-grid">
+        <canvas id="year-canvas" aria-label="Сетка из 365 дней одного года"></canvas>
+        <ul class="year-list" id="year-list"></ul>
       </div>
 
-      <div class="life-grid">
-        <canvas id="life-canvas" aria-label="Сетка недель жизни"></canvas>
+      <div class="goals">
+        <label for="goals">Сколько целей вы&nbsp;хотите закрыть в&nbsp;этом году</label>
+        <div class="goals-ctl">
+          <input id="goals" type="number" min="1" max="12" step="1" value="3" inputmode="numeric">
+          <input id="goals-range" type="range" min="1" max="12" step="1" value="3" aria-label="Число целей, ползунок">
+        </div>
       </div>
 
       <div class="stats" id="stats">
-        <div class="stat"><b id="st-lived">—</b><span>недель прожито</span></div>
-        <div class="stat"><b id="st-left">—</b><span>недель впереди</span></div>
-        <div class="stat"><b id="st-days">—</b><span>дней впереди</span></div>
-        <div class="stat"><b id="st-share">—</b><span>пути пройдено</span></div>
+        <div class="stat"><b id="st-days">—</b><span>дней до конца года</span></div>
+        <div class="stat"><b id="st-hours">—</b><span>ваших свободных часов</span></div>
+        <div class="stat"><b id="st-per">—</b><span>часов на каждую цель</span></div>
+        <div class="stat"><b id="st-week">—</b><span>часов в неделю на цель</span></div>
       </div>
 
       <p class="note">
-        Это не&nbsp;мрачная статистика, а&nbsp;масштаб. Пустых клеток меньше, чем кажется,
-        и&nbsp;ровно поэтому имеет смысл знать, на&nbsp;что уходит каждая.
+        Разобраться с&nbsp;прокрастинацией можно за&nbsp;месяц. Заговорить
+        на&nbsp;другом языке&nbsp;— за&nbsp;год. Спортивное тело&nbsp;— это
+        три-пять лет регулярных тренировок. Воспитание ребёнка&nbsp;— может занять
+        всю жизнь. Разница между «когда-нибудь» и&nbsp;«сделано»&nbsp;—
+        в&nbsp;количестве минут, часов и&nbsp;дней, которые вы&nbsp;на&nbsp;это
+        отвели. А&nbsp;какие дела вы&nbsp;бы не&nbsp;хотели упустить?
       </p>
     </div>
   </section>
@@ -98,60 +108,133 @@
   <!-- ─────────────── один день ─────────────── -->
   <section class="day reveal" id="day">
     <div class="wrap">
-      <p class="eyebrow">ближе к&nbsp;земле</p>
-      <h2>Из&nbsp;одного дня остаётся три часа</h2>
+      <p class="eyebrow">ваш реальный бюджет</p>
+      <h2>Свободных часов больше, чем кажется</h2>
       <p class="text">
-        Сутки кажутся длинными, пока их&nbsp;не&nbsp;разложить по&nbsp;часам.
-        Сон, работа, дорога и&nbsp;быт забирают почти всё.
+        Сон, работа, дорога и&nbsp;быт забирают большую часть суток&nbsp;—
+        это нормально. Важно другое: остаётся около трёх часов, и&nbsp;именно они
+        решают, появится ли&nbsp;форма, язык, проект или спокойный вечер
+        с&nbsp;близкими.
       </p>
 
       <div class="hours" id="hours" aria-hidden="true"></div>
       <div class="legend" id="legend"></div>
 
       <p class="note" id="day-note">
-        Свободного остаётся три часа из&nbsp;двадцати четырёх. Именно они решают,
-        будет ли&nbsp;сделано то, что для вас важно&nbsp;— и&nbsp;именно они исчезают
-        незаметнее всего.
+        Три часа в&nbsp;день&nbsp;— это 21&nbsp;час в&nbsp;неделю и&nbsp;90&nbsp;часов
+        в&nbsp;месяц. Достаточно, чтобы привести себя в&nbsp;форму или довести
+        до&nbsp;конца то, что откладывалось годами. Но&nbsp;только если вы&nbsp;видите,
+        куда эти часы уходят.
       </p>
     </div>
   </section>
 
-  <!-- ─────────────── что внутри ─────────────── -->
+  <!-- ─────────────── что попадает в учёт ─────────────── -->
   <section class="what reveal" id="what">
     <div class="wrap">
-      <p class="eyebrow">как это работает</p>
-      <h2>Заметить&nbsp;— значит записать</h2>
+      <p class="eyebrow">что попадает в&nbsp;учёт</p>
+      <h2>Что вы&nbsp;получаете уже на&nbsp;первой неделе</h2>
       <p class="text">
-        Хронум не&nbsp;ставит целей и&nbsp;не&nbsp;подгоняет. Он&nbsp;делает одно:
-        превращает прошедшее время в&nbsp;картинку, на&nbsp;которую можно смотреть.
+        Управлять можно тем, что видно. Хронум ничего не&nbsp;решает за&nbsp;вас&nbsp;—
+        он&nbsp;делает вашу жизнь читаемой, а&nbsp;дальше решения появляются сами.
       </p>
 
-      <div class="cards">
+      <div class="cards cards-shots">
         <article class="card">
-          <div class="shot"><img src="img/landing/day.png" alt="Экран дня: сетка из двадцати четырёх часов" loading="lazy" width="905" height="795"></div>
-          <h3>День по&nbsp;часам</h3>
+          <div class="shot"><img src="img/landing/dates.png" alt="Экран важных дат: дни рождения и годовщины" loading="lazy" width="905" height="795"></div>
+          <h3>Семья</h3>
           <p>
-            Двадцать четыре клетки. Отмечаете занятие&nbsp;— часы закрашиваются,
-            и&nbsp;сразу видно, сколько дня ушло на&nbsp;работу, сколько на&nbsp;отдых,
-            а&nbsp;сколько просто растворилось.
+            Вечера с&nbsp;близкими, дни рождения, годовщины, поездки
+            к&nbsp;родителям. Про&nbsp;то, что нет ничего важнее семьи, любят
+            говорить в&nbsp;кино. Хронум не&nbsp;даст забыть важные семейные даты
+            и&nbsp;события.
           </p>
         </article>
         <article class="card">
           <div class="shot"><img src="img/landing/month.png" alt="Экран месяца: календарь с закрашенными днями" loading="lazy" width="905" height="795"></div>
-          <h3>Месяц одним взглядом</h3>
+          <h3>Рабочие цели</h3>
           <p>
-            Дни складываются в&nbsp;полотно. Плотные недели и&nbsp;пустые полосы
-            видны без отчётов: картина месяца читается за&nbsp;пару секунд.
+            Проекты, дела и&nbsp;сроки живут там&nbsp;же, где часы. Видно
+            не&nbsp;только «я&nbsp;много работал», а&nbsp;сколько именно часов
+            ушло в&nbsp;задачу, которая действительно двигала дело вперёд.
+          </p>
+        </article>
+        <article class="card">
+          <div class="shot"><img src="img/landing/day.png" alt="Экран дня: сетка из двадцати четырёх часов" loading="lazy" width="905" height="795"></div>
+          <h3>Дела и&nbsp;планы</h3>
+          <p>
+            Список задач, привязанный к&nbsp;дню, а&nbsp;не&nbsp;к&nbsp;настроению.
+            Невыполненное не&nbsp;теряется, а&nbsp;остаётся видимым: сразу понятно,
+            что откладывается третью неделю.
           </p>
         </article>
         <article class="card">
           <div class="shot"><img src="img/landing/entries.png" alt="Список записей за месяц" loading="lazy" width="905" height="594"></div>
-          <h3>История, а&nbsp;не&nbsp;список дел</h3>
+          <h3>Заметки и&nbsp;мысли</h3>
           <p>
-            К&nbsp;часам добавляются задачи, мысли, траты, еда и&nbsp;настроение.
-            Через год записи складываются в&nbsp;хронику, по&nbsp;которой видно,
-            чем на&nbsp;самом деле была занята жизнь.
+            Короткие записи по&nbsp;ходу дня: идея, вывод, разговор. Через год
+            это уже не&nbsp;заметки, а&nbsp;история вашего мышления.
           </p>
+        </article>
+
+      </div>
+
+      <div class="cards cards-plain-grid">
+        <article class="card card-plain">
+          <h3>Вес и&nbsp;калории</h3>
+          <p>
+            Приёмы пищи и&nbsp;калории пишутся в&nbsp;тот&nbsp;же день, что
+            и&nbsp;остальное. Через неделю вместо «много ем» появляется конкретная
+            картина срывов.
+          </p>
+        </article>
+        <article class="card card-plain">
+          <h3>Тело и&nbsp;тренировки</h3>
+          <p>
+            Занятия, километры, подходы. Месяц показывает не&nbsp;намерения,
+            а&nbsp;факт: сколько тренировок было и&nbsp;не&nbsp;затянулся
+            ли&nbsp;пропуск.
+          </p>
+        </article>
+        <article class="card card-plain">
+          <h3>Сон и&nbsp;режим</h3>
+          <p>
+            Когда легли, когда встали, сколько спали. Режим налаживается
+            не&nbsp;обещаниями, а&nbsp;видимой строкой, которую неприятно портить.
+          </p>
+        </article>
+        <article class="card card-plain">
+          <h3>Здоровье и&nbsp;врачи</h3>
+          <p>
+            Визиты, анализы, курсы лекарств, напоминания «пора повторить».
+            То, что обычно вспоминается слишком поздно, хранится рядом
+            с&nbsp;обычными днями.
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────── как это работает ─────────────── -->
+  <section class="how reveal" id="how">
+    <div class="wrap">
+      <p class="eyebrow">как это работает</p>
+      <h2>Три шага, и&nbsp;больше ничего</h2>
+      <div class="steps">
+        <article class="step">
+          <span class="step-n">01</span>
+          <h3>Отметили час</h3>
+          <p>Один тап: чем были заняты. Пять секунд, без форм и&nbsp;отчётов.</p>
+        </article>
+        <article class="step">
+          <span class="step-n">02</span>
+          <h3>Увидели картину</h3>
+          <p>День, месяц, год собираются сами. Ничего считать вручную не&nbsp;нужно.</p>
+        </article>
+        <article class="step">
+          <span class="step-n">03</span>
+          <h3>Изменили следующий</h3>
+          <p>Когда видно, где уходит время, менять его становится делом техники, а&nbsp;не&nbsp;силы воли.</p>
         </article>
       </div>
     </div>
@@ -160,20 +243,84 @@
   <!-- ─────────────── финал ─────────────── -->
   <section class="closing reveal">
     <div class="wrap narrow">
-      <h2>Зачем это сделано</h2>
+      <h2>Что нужно, чтобы успевать важное?</h2>
       <p class="text big">
-        Я&nbsp;завёл такой дневник для себя. Не&nbsp;из&nbsp;тревоги, а&nbsp;из&nbsp;простого
-        расчёта: времени у&nbsp;меня конечное количество, и&nbsp;хочется успеть то,
-        что имеет значение. Незаписанный день растворяется бесследно,
-        записанный становится частью понятной картины.
-      </p>
-      <p class="text">
-        Хронум делает эту картину видимой. Дальше уже ваше дело&nbsp;— что с&nbsp;ней
-        сделать.
+        Что нужно, чтобы успевать то, что действительно важно? Не&nbsp;терять дни
+        в&nbsp;тумане «вроде был занят», помнить о&nbsp;близких не&nbsp;по&nbsp;случаю,
+        доводить начатое до&nbsp;конца, а&nbsp;не&nbsp;до&nbsp;следующего года.
+        Универсального ответа нет&nbsp;— его не&nbsp;даст вам ни&nbsp;книга
+        про&nbsp;высокоэффективные навыки, ни&nbsp;курс по&nbsp;тайм-менеджменту.
+        Но&nbsp;у&nbsp;ответа есть одно условие: нужно видеть, куда уходит ваше время.
+        Попробуйте Хронум&nbsp;— и&nbsp;ответ станет заметно ближе.
       </p>
       <div class="cta">
-        <a class="btn btn-solid" href="/">Открыть Хронум</a>
+        <a class="btn btn-solid" href="/?reg=1">Завести Хронум</a>
       </div>
+      <p class="hint">Регистрация занимает минуту. О&nbsp;тарифах сообщим заранее, без сюрпризов.</p>
+    </div>
+  </section>
+
+  <!-- ─────────────── доверие и компании ─────────────── -->
+  <section class="trust reveal" id="trust">
+    <div class="wrap">
+      <div class="trust-grid">
+        <article class="trust-card">
+          <h3>Без рекламы</h3>
+          <p>
+            Никаких баннеров, промо и&nbsp;«партнёрских предложений».
+            Мы&nbsp;старались сделать так, чтобы приложение решало только вашу
+            задачу, а&nbsp;не&nbsp;маркетинговые цели других.
+          </p>
+        </article>
+        <article class="trust-card">
+          <h3>Данные никуда не&nbsp;уходят</h3>
+          <p>
+            Хронум не&nbsp;передаёт даже обезличенные данные сторонним сервисам:
+            ни&nbsp;аналитике, ни&nbsp;рекламным сетям, ни&nbsp;«партнёрам
+            по&nbsp;улучшению продукта». Записи изолированы на&nbsp;уровне базы
+            и&nbsp;доступны только вашему аккаунту.
+          </p>
+        </article>
+        <article class="trust-card">
+          <h3>Для компаний&nbsp;— в&nbsp;вашем контуре</h3>
+          <p>
+            Хронум возможно развернуть на&nbsp;сервере организации: данные
+            сотрудников остаются внутри, наружу не&nbsp;уходит ничего. Понятный
+            учёт времени&nbsp;— это рост эффективности и&nbsp;человеческого
+            капитала без слежки и&nbsp;микроменеджмента. Также мы&nbsp;готовы
+            доработать сервис под ваши индивидуальные метрики. Расскажите
+            о&nbsp;задаче&nbsp;— обсудим.
+          </p>
+        </article>
+      </div>
+
+      <p class="eyebrow lead-eyebrow">расскажите о&nbsp;задаче</p>
+      <form class="lead-form" id="lead-form" novalidate>
+        <div class="lead-row">
+          <label for="ld-name">Имя</label>
+          <input id="ld-name" name="name" maxlength="120" autocomplete="name">
+        </div>
+        <div class="lead-row">
+          <label for="ld-company">Компания</label>
+          <input id="ld-company" name="company" maxlength="160" autocomplete="organization">
+        </div>
+        <div class="lead-row">
+          <label for="ld-contact">Почта или телефон</label>
+          <input id="ld-contact" name="contact" maxlength="160" autocomplete="email">
+        </div>
+        <div class="lead-row">
+          <label for="ld-tg">Ник в&nbsp;телеграме</label>
+          <input id="ld-tg" name="telegram" maxlength="80" placeholder="@nickname">
+        </div>
+        <div class="lead-row lead-wide">
+          <label for="ld-msg">Задача</label>
+          <textarea id="ld-msg" name="message" rows="3" maxlength="4000"></textarea>
+        </div>
+        <div class="lead-act">
+          <button class="btn btn-solid" type="submit">Отправить</button>
+          <span class="lead-msg" id="lead-msg" role="status"></span>
+        </div>
+      </form>
     </div>
   </section>
 

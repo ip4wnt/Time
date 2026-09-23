@@ -122,7 +122,9 @@ h3 { font-size: 1.25rem; line-height: 1.2; color: var(--num); }
 .ticker {
   margin: 2.25rem 0 0; font-size: 1rem; color: var(--muted);
 }
+.ticker { min-height: 4.5em; max-width: 40em; }
 .ticker b { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
+#ticker-text { display: inline; transition: opacity .26s ease; }
 .cta { display: flex; flex-wrap: wrap; gap: .875rem; margin-top: 2.5rem; }
 .hero-foot {
   position: relative; z-index: 2;
@@ -131,45 +133,59 @@ h3 { font-size: 1.25rem; line-height: 1.2; color: var(--num); }
 .hero-foot .hint { font-size: 0.8125rem; letter-spacing: .08em; color: #5A5A5A; }
 
 /* ---------- общие отступы секций ---------- */
-section.life, section.day, section.what, section.closing {
+section.year, section.day, section.what, section.how, section.closing, section.trust {
+  scroll-margin-top: 5rem;
   padding: clamp(5rem, 11vh, 9rem) 0;
   border-top: 1px solid #101010;
 }
 
-/* ---------- сетка жизни ---------- */
-.life-ctl {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 1rem;
-  margin-top: 2.5rem;
-}
-.life-ctl label { font-size: 0.9375rem; color: var(--muted); }
-.life-ctl input[type="number"] {
+/* ---------- год как на ладони ---------- */
+.goals-ctl input[type="number"] {
   width: 7rem; height: 3rem;
   background: var(--cell); border: 1px solid var(--stroke);
   color: var(--num); font-family: inherit; font-size: 1.125rem; text-align: center;
   outline: none;
 }
-.life-ctl input[type="number"]:focus { border-color: var(--accent); }
-.life-ctl input[type="range"] {
+.goals-ctl input[type="number"]:focus { border-color: var(--accent); }
+.goals-ctl input[type="range"] {
   flex: 1; min-width: 12rem; max-width: 26rem;
   -webkit-appearance: none; appearance: none;
   height: 3rem; background: none; outline: none;
 }
-.life-ctl input[type="range"]::-webkit-slider-runnable-track {
+.goals-ctl input[type="range"]::-webkit-slider-runnable-track {
   height: 2px; background: var(--stroke);
 }
-.life-ctl input[type="range"]::-webkit-slider-thumb {
+.goals-ctl input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: .875rem; height: 1.5rem; margin-top: -.6875rem;
   background: var(--accent); border: 0; cursor: pointer;
 }
-.life-ctl input[type="range"]::-moz-range-track { height: 2px; background: var(--stroke); }
-.life-ctl input[type="range"]::-moz-range-thumb {
+.goals-ctl input[type="range"]::-moz-range-track { height: 2px; background: var(--stroke); }
+.goals-ctl input[type="range"]::-moz-range-thumb {
   width: .875rem; height: 1.5rem; border: 0; border-radius: 0;
   background: var(--accent); cursor: pointer;
 }
 
-.life-grid { margin-top: 2.75rem; overflow-x: auto; }
-#life-canvas { display: block; margin: 0 auto; }
+.year-grid {
+  margin-top: 2.75rem;
+  display: grid; grid-template-columns: auto minmax(14rem, 22rem);
+  gap: 2rem 3rem; align-items: start;
+}
+#year-canvas { display: block; }
+.year-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .875rem; }
+.year-list li { display: grid; grid-template-columns: .75rem auto 1fr; align-items: baseline; gap: .75rem; }
+.year-list em {
+  width: .75rem; height: .75rem; font-style: normal; display: block;
+  transform: translateY(.15rem); opacity: .9;
+}
+.year-list b {
+  font-size: 1.25rem; font-weight: 700; color: var(--num);
+  font-variant-numeric: tabular-nums;
+}
+.year-list span { font-size: 0.875rem; color: var(--muted); line-height: 1.4; }
+.goals { display: grid; gap: .75rem; margin-top: 2.75rem; max-width: 34rem; }
+.goals label { font-size: 0.9375rem; color: var(--muted); }
+.goals-ctl { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; }
 
 .stats {
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
@@ -216,18 +232,63 @@ section.life, section.day, section.what, section.closing {
 .legend em { width: .75rem; height: .75rem; font-style: normal; flex: none; }
 
 /* ---------- что внутри ---------- */
-.cards {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;
-  margin-top: 3rem;
-}
+.cards { display: grid; gap: 1.5rem; margin-top: 3rem; }
+.cards-shots { grid-template-columns: repeat(2, 1fr); }
+.cards-plain-grid { grid-template-columns: repeat(4, 1fr); gap: 1.25rem; margin-top: 1.5rem; }
 .card { border: 1px solid var(--stroke); background: #060606; padding: 1.25rem; }
 .card .shot {
   overflow: hidden; background: #000; border: 1px solid #141414;
   margin-bottom: 1.5rem;
 }
-.card .shot { aspect-ratio: 905 / 795; }
-.card .shot img { width: 100%; height: 100%; display: block; object-fit: cover; object-position: top center; }
+.card .shot { aspect-ratio: 905 / 594; }
+.card .shot img { width: 100%; height: 100%; display: block; object-fit: cover; object-position: top left; }
+.card h3 { font-size: 1.0625rem; }
 .card p { margin: .75rem 0 0; font-size: 0.9375rem; line-height: 1.5; color: #A9A9A9; }
+.card-plain { border-color: #141414; background: #040404; }
+.card-plain h3 { color: var(--accent); }
+
+/* ---------- как это работает ---------- */
+.steps {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+  margin-top: 3rem; background: var(--stroke); border: 1px solid var(--stroke);
+}
+.step { background: var(--cell); padding: 1.75rem 1.5rem; }
+.step-n {
+  display: block; font-size: 0.8125rem; letter-spacing: .16em;
+  color: var(--accent); margin-bottom: 1rem;
+}
+.step h3 { font-size: 1.125rem; }
+.step p { margin: .625rem 0 0; font-size: 0.9375rem; line-height: 1.5; color: #A9A9A9; }
+
+/* ---------- доверие и компании ---------- */
+.trust-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;
+}
+.trust-card { border: 1px solid var(--stroke); background: #060606; padding: 1.5rem 1.375rem; }
+.trust-card h3 { font-size: 1.0625rem; color: var(--num); }
+.trust-card p { margin: .875rem 0 0; font-size: 0.9375rem; line-height: 1.55; color: #A9A9A9; }
+
+.lead-eyebrow { margin-top: 2.75rem; }
+.lead-form {
+  margin-top: 1rem; display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem 1.5rem; border: 1px solid var(--stroke); background: #050505;
+  padding: 1.75rem 1.5rem;
+}
+.lead-row { display: grid; gap: .45rem; }
+.lead-row label { font-size: 0.875rem; color: var(--muted); }
+.lead-wide { grid-column: 1 / -1; }
+.lead-form input, .lead-form textarea {
+  font: inherit; color: var(--text); background: #0B0B0B;
+  border: 1px solid var(--stroke); padding: .6rem .75rem; width: 100%;
+  border-radius: 0;
+}
+.lead-form textarea { resize: vertical; min-height: 5.25rem; line-height: 1.5; }
+.lead-form input:focus, .lead-form textarea:focus { outline: none; border-color: var(--accent); }
+.lead-act { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; }
+.lead-act .btn { width: auto; }
+.lead-msg { font-size: 0.9375rem; color: var(--accent); }
+.lead-msg.bad { color: var(--pink, #E07FB8); }
+.closing .hint { margin-top: 1.25rem; font-size: 0.875rem; color: var(--muted); }
 
 /* ---------- финал ---------- */
 .closing .cta { margin-top: 2.75rem; }
@@ -240,29 +301,33 @@ section.life, section.day, section.what, section.closing {
 
 /* ---------- появление секций ---------- */
 .reveal .eyebrow, .reveal h2, .reveal .text, .reveal .note,
-.reveal .life-ctl, .reveal .life-grid, .reveal .stats,
-.reveal .legend, .reveal .cards, .reveal .cta {
+.reveal .lead-eyebrow, .reveal .goals, .reveal .year-grid, .reveal .stats,
+.reveal .legend, .reveal .cards, .reveal .steps,
+.reveal .trust-grid, .reveal .lead-form, .reveal .cta {
   opacity: 0; transform: translateY(14px);
   transition: opacity .7s ease, transform .7s ease;
 }
 .reveal.in .eyebrow, .reveal.in h2, .reveal.in .text, .reveal.in .note,
-.reveal.in .life-ctl, .reveal.in .life-grid, .reveal.in .stats,
-.reveal.in .legend, .reveal.in .cards, .reveal.in .cta {
+.reveal.in .goals, .reveal.in .year-grid, .reveal.in .stats,
+.reveal.in .legend, .reveal.in .cards, .reveal.in .steps,
+.reveal.in .trust-grid, .reveal.in .lead-form, .reveal.in .cta {
   opacity: 1; transform: none;
 }
 .reveal.in h2 { transition-delay: .06s; }
 .reveal.in .text { transition-delay: .12s; }
-.reveal.in .life-ctl, .reveal.in .cards, .reveal.in .legend { transition-delay: .18s; }
-.reveal.in .life-grid, .reveal.in .stats { transition-delay: .24s; }
+.reveal.in .goals, .reveal.in .cards, .reveal.in .legend,
+.reveal.in .steps, .reveal.in .trust-grid { transition-delay: .18s; }
+.reveal.in .year-grid, .reveal.in .stats { transition-delay: .24s; }
 .reveal.in .note { transition-delay: .3s; }
 
 /* ---------- планшет ---------- */
 @media (max-width: 900px) {
-  .cards { grid-template-columns: 1fr; gap: 1.25rem; }
-  .card { display: grid; grid-template-columns: 10rem 1fr; gap: 1.25rem 1.5rem; align-items: start; }
-  .card .shot { grid-row: auto; margin-bottom: 1.25rem; }
-  .card .shot img { height: auto; }
-  .card p { align-self: start; }
+  .year-grid { grid-template-columns: 1fr; gap: 2rem; }
+  .year-list { grid-template-columns: repeat(2, 1fr); gap: .875rem 1.5rem; }
+  .steps { grid-template-columns: 1fr; }
+  .trust-grid { grid-template-columns: 1fr; gap: 1.25rem; }
+  .cards-shots { grid-template-columns: 1fr; }
+  .cards-plain-grid { grid-template-columns: repeat(2, 1fr); }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .hours { grid-template-columns: repeat(12, 1fr); gap: 4px; }
   .hour { aspect-ratio: 1 / 1; }
@@ -270,6 +335,11 @@ section.life, section.day, section.what, section.closing {
 
 /* ---------- телефон ---------- */
 @media (max-width: 620px) {
+  .year-list { grid-template-columns: 1fr; }
+  .cards-plain-grid { grid-template-columns: 1fr; }
+  .lead-form { grid-template-columns: 1fr; padding: 1.5rem 1.25rem; }
+  .lead-act .btn { width: 100%; }
+  .ticker { min-height: 6em; }
   body { font-size: 1rem; }
   .top { height: 4rem; padding: 0 1rem; }
   .top-nav { gap: 1rem; }
@@ -294,7 +364,8 @@ section.life, section.day, section.what, section.closing {
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .reveal .eyebrow, .reveal h2, .reveal .text, .reveal .note,
-  .reveal .life-ctl, .reveal .life-grid, .reveal .stats,
-  .reveal .legend, .reveal .cards, .reveal .cta { opacity: 1; transform: none; transition: none; }
+  .reveal .lead-eyebrow, .reveal .goals, .reveal .year-grid, .reveal .stats,
+  .reveal .legend, .reveal .cards, .reveal .steps,
+  .reveal .trust-grid, .reveal .lead-form, .reveal .cta { opacity: 1; transform: none; transition: none; }
   .hour { opacity: 1; transform: none; transition: none; }
 }

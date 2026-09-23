@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Хронум — заявки</title>
+<style>
+  :root { --bg:#000; --text:#DEDEDE; --muted:#7A7A7A; --line:#1C1C1C; --accent:#73D383; --warm:#C98A4E; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.6 "Ubuntu Mono", ui-monospace, monospace; padding: 2rem 1.25rem 5rem;
+  }
+  h1 { font-size: 1.5rem; margin: 0 0 .25rem; letter-spacing: .02em; }
+  .sub { color: var(--muted); font-size: .875rem; margin-bottom: 2rem; }
+  .row {
+    border: 1px solid var(--line); padding: 1rem 1.125rem; margin-bottom: .75rem;
+    max-width: 52rem;
+  }
+  .row.done { opacity: .5; }
+  .head { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: baseline; }
+  .who { font-size: 1.0625rem; }
+  .co { color: var(--warm); }
+  .when { color: var(--muted); font-size: .8125rem; margin-left: auto; }
+  .contacts { color: var(--accent); font-size: .875rem; margin: .5rem 0 .625rem; word-break: break-word; }
+  .msg { white-space: pre-wrap; }
+  .meta { color: var(--muted); font-size: .75rem; margin-top: .75rem; }
+  .acts { display: flex; gap: .5rem; margin-top: .875rem; }
+  button {
+    font: inherit; font-size: .8125rem; color: var(--text); background: #0C0C0C;
+    border: 1px solid var(--line); padding: .3rem .75rem; cursor: pointer;
+  }
+  button:hover { border-color: #333; }
+  form.login { max-width: 20rem; display: grid; gap: .5rem; }
+  input { font: inherit; background: #0C0C0C; color: var(--text); border: 1px solid var(--line); padding: .5rem .625rem; }
+  .err { color: #E07FB8; min-height: 1.4em; font-size: .875rem; }
+  .empty { color: var(--muted); }
+</style>
+</head>
+<body>
+  <h1>Заявки</h1>
+  <div class="sub">Корпоративное развёртывание — обращения с публичной страницы</div>
+  <div id="app"><div class="empty">Загрузка…</div></div>
+
+<script>
+(function () {
+  'use strict';
+  var app = document.getElementById('app');
+
+  function api(method, url, body) {
+    return fetch(url, {
+      method: method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: 'same-origin'
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (!r.ok) throw new Error(data.error || ('Ошибка ' + r.status));
+        return data;
+      });
+    });
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function when(iso) {
+    var d = new Date(iso);
+    return d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function showLogin(msg) {
+    app.innerHTML = '<form class="login"><input name="login" placeholder="логин" autocomplete="username">' +
+      '<input name="password" type="password" placeholder="пароль" autocomplete="current-password">' +
+      '<button type="submit">Войти</button><div class="err">' + esc(msg || '') + '</div></form>';
+    var f = app.querySelector('form');
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      api('POST', '/api/auth/login', { login: f.login.value.trim(), password: f.password.value })
+        .then(load)
+        .catch(function (err) { f.querySelector('.err').textContent = err.message; });
+    });
+  }
+
+  function render(leads) {
+    if (!leads.length) { app.innerHTML = '<div class="empty">Заявок пока нет.</div>'; return; }
+    app.innerHTML = leads.map(function (l) {
+      var contacts = [l.contact, l.telegram ? '@' + l.telegram : ''].filter(Boolean).join('  ·  ');
+      return '<div class="row ' + (l.status === 'done' ? 'done' : '') + '" data-id="' + l.id + '">' +
+        '<div class="head"><span class="who">' + esc(l.name) + '</span>' +
+        (l.company ? '<span class="co">' + esc(l.company) + '</span>' : '') +
+        '<span class="when">' + when(l.created_at) + '</span></div>' +
+        '<div class="contacts">' + esc(contacts) + '</div>' +
+        '<div class="msg">' + esc(l.message) + '</div>' +
+        '<div class="meta">id ' + l.id + ' · ip ' + esc(l.ip) + ' · ' + (l.status === 'done' ? 'обработана' : 'новая') + '</div>' +
+        '<div class="acts"><button data-act="status">' + (l.status === 'done' ? 'вернуть в новые' : 'обработана') + '</button>' +
+        '<button data-act="del">удалить</button></div>' +
+        '</div>';
+    }).join('');
+
+    app.querySelectorAll('.row').forEach(function (row) {
+      var id = row.dataset.id;
+      var lead = leads.filter(function (l) { return String(l.id) === id; })[0];
+      row.querySelector('[data-act=status]').onclick = function () {
+        api('PUT', '/api/admin/leads/' + id, { status: lead.status === 'done' ? 'new' : 'done' }).then(load);
+      };
+      row.querySelector('[data-act=del]').onclick = function () {
+        if (!confirm('Удалить заявку?')) return;
+        api('DELETE', '/api/admin/leads/' + id).then(load);
+      };
+    });
+  }
+
+  function load() {
+    app.innerHTML = '<div class="empty">Загрузка…</div>';
+    api('GET', '/api/admin/leads')
+      .then(function (d) { render(d.leads || []); })
+      .catch(function (e) {
+        if (/войти/i.test(e.message)) showLogin('');
+        else if (/администратор/i.test(e.message)) app.innerHTML = '<div class="empty">Этот аккаунт не администратор.</div>';
+        else app.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+      });
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

@@ -194,3 +194,21 @@ BEGIN
   END LOOP;
 END
 $rls$;
+
+-- ===== Заявки с публичной страницы (корпоративное развёртывание) =====
+-- Таблица не связана с пользователями и не закрыта RLS: читает её только
+-- администратор через /api/admin/leads (см. server/routes.js).
+CREATE TABLE IF NOT EXISTS leads (
+  id         BIGSERIAL PRIMARY KEY,
+  name       TEXT NOT NULL DEFAULT '',
+  company    TEXT NOT NULL DEFAULT '',
+  contact    TEXT NOT NULL DEFAULT '',
+  telegram   TEXT NOT NULL DEFAULT '',
+  message    TEXT NOT NULL DEFAULT '',
+  ip         TEXT NOT NULL DEFAULT '',
+  user_agent TEXT NOT NULL DEFAULT '',
+  status     TEXT NOT NULL DEFAULT 'new',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS leads_created_idx ON leads(created_at DESC);
+CREATE INDEX IF NOT EXISTS leads_ip_idx ON leads(ip, created_at DESC);

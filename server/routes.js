@@ -487,4 +487,55 @@ router.add('GET', '/api/search', async ({ q, user, query }) => {
   };
 });
 
+// ---------------- заявки с публичной страницы ----------------
+// Открытый метод: форма «для компаний» на /landing.html. Ни одного поля наружу
+// не уходит — заявки читает только администратор через /api/admin/leads.
+function isAdmin(user) {
+  return !!(user && user.settings && user.settings.admin === true);
+}
+function needAdmin(user) {
+  if (!isAdmin(user)) throw new HttpError(403, 'Доступ только администратору');
+}
+
+router.add('POST', '/api/leads', async ({ body, req }) => {
+  const name = str(body.name, 120).trim();
+  const company = str(body.company, 160).trim();
+  const contact = str(body.contact, 160).trim();
+  const telegram = str(body.telegram, 80).trim().replace(/^@+/, '');
+  const message = str(body.message, 4000).trim();
+  if (name.length < 2) throw new HttpError(400, 'Укажите имя');
+  if (!contact && !telegram) throw new HttpError(400, 'Оставьте почту, телефон или ник в телеграме');
+  if (message.length < 5) throw new HttpError(400, 'Опишите задачу хотя бы коротко');
+  const ip = req.ip || '';
+  // простое ограничение частоты: не больше пяти заявок с одного адреса в час
+  const recent = await db.query("SELECT count(*)::int AS n FROM leads WHERE ip=$1 AND created_at > now() - interval '1 hour'", [ip]);
+  if (recent.rows[0].n >= 5) throw new HttpError(429, 'Слишком много заявок подряд. Попробуйте позже.');
+  await db.query(
+    'INSERT INTO leads (name, company, contact, telegram, message, ip, user_agent) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+    [name, company, contact, telegram, message, ip, str(req.headers['user-agent'] || '', 400)],
+  );
+  console.log(`[leads] новая заявка: ${name}${company ? ' / ' + company : ''}`);
+  return { ok: true };
+}, { public: true });
+
+router.add('GET', '/api/admin/leads', async ({ user, query }) => {
+  needAdmin(user);
+  const limit = Math.min(Math.max(Number(query.limit) || 200, 1), 500);
+  const r = await db.query('SELECT id, name, company, contact, telegram, message, ip, status, created_at FROM leads ORDER BY created_at DESC LIMIT $1', [limit]);
+  return { leads: r.rows, total: r.rowCount };
+});
+
+router.add('PUT', '/api/admin/leads/:id', async ({ user, params, body }) => {
+  needAdmin(user);
+  const status = ['new', 'done'].includes(body.status) ? body.status : 'new';
+  await db.query('UPDATE leads SET status=$2 WHERE id=$1', [int(params.id), status]);
+  return { ok: true };
+});
+
+router.add('DELETE', '/api/admin/leads/:id', async ({ user, params }) => {
+  needAdmin(user);
+  await db.query('DELETE FROM leads WHERE id=$1', [int(params.id)]);
+  return { ok: true };
+});
+
 module.exports = { router, COOKIE };

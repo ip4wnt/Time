@@ -131,191 +131,214 @@
   })();
 
   /* ======================================================================
-     2. Счётчик времени на странице
+     2. Бегущая строка: ценность отрезка времени. Первая минута меняется
+        каждые 20 секунд, дальше — на каждой минуте.
      ====================================================================== */
   (function ticker() {
-    var el = document.getElementById('ticker-time');
-    if (!el) return;
+    var elTime = document.getElementById('ticker-time');
+    var elText = document.getElementById('ticker-text');
+    if (!elTime || !elText) return;
+
+    // at — с какой секунды показывать фразу
+    var lines = [
+      { at: 0,   t: 'Секунду ценит тот, кто успел затормозить. Здесь секунда\u00a0— это один тап, которым отмечен прошедший час.' },
+      { at: 20,  t: 'Двадцать секунд знает спортсмен на\u00a0последнем рывке. Столько занимает записать весь ваш день.' },
+      { at: 40,  t: 'Ценность минуты знает тот, кто опоздал на\u00a0самолёт. Минуты в\u00a0Хронуме складываются в\u00a0часы, которые видно.' },
+      { at: 60,  t: 'Минуту ценит врач в\u00a0приёмном покое. Хронум помнит, когда вы\u00a0были у\u00a0врача в\u00a0прошлый раз и\u00a0когда пора снова.' },
+      { at: 120, t: 'Две минуты\u00a0— короткий разговор с\u00a0мамой. Ровно то, что чаще всего откладывают на\u00a0потом и\u00a0забывают отметить.' },
+      { at: 180, t: 'Ценность трёх минут знает тот, кто заваривает чай вместо пятой чашки кофе. Привычки тоже считаются.' },
+      { at: 240, t: 'Четыре минуты\u00a0— подход в\u00a0зале. Из\u00a0таких подходов за\u00a0год собирается другое тело.' },
+      { at: 300, t: 'Ценность пяти минут знает тот, кто ложится спать вовремя. Режим\u00a0— это не\u00a0сила воли, а\u00a0учёт.' },
+      { at: 360, t: 'Шесть минут\u00a0— страница дневника. Через год это уже хроника, а\u00a0не\u00a0список дел.' },
+      { at: 420, t: 'Семь минут\u00a0— завтрак, который вы\u00a0не\u00a0записали. Вес меняется только там, где ведётся учёт.' },
+      { at: 480, t: 'Ценность восьми минут знает тот, кто читает перед сном. Хронум покажет, сколько таких вечеров у\u00a0вас было.' },
+      { at: 540, t: 'Девять минут\u00a0— дорога до\u00a0дома пешком вместо пробки. Дорогу тоже можно посчитать.' },
+      { at: 600, t: 'Ценность десяти минут знает отец, которого ждут во\u00a0дворе. Это время стоит отметить, чтобы оно не\u00a0потерялось.' },
+      { at: 900, t: 'Четверть часа знает тот, кто пишет книгу по\u00a0абзацу в\u00a0день. Хронум считает эти абзацы за\u00a0вас.' },
+      { at: 1200, t: 'Вы\u00a0здесь двадцать минут. За\u00a0это время можно было отметить целую неделю\u00a0— и\u00a0увидеть её целиком.' },
+      { at: 1800, t: 'Неделя, которую вы\u00a0ещё не\u00a0записали, тоже идёт. Начать проще, чем кажется: один час, один тап.' }
+    ];
+
     var t0 = Date.now();
+    var shown = -1;
+
+    function phrase(sec) {
+      var i = 0;
+      for (var k = 0; k < lines.length; k++) if (sec >= lines[k].at) i = k;
+      return i;
+    }
+
     function tick() {
       var s = Math.floor((Date.now() - t0) / 1000);
       var m = Math.floor(s / 60);
-      el.textContent = m > 0
+      elTime.textContent = m > 0
         ? m + '\u00a0мин ' + String(s % 60).padStart(2, '0') + '\u00a0с'
         : s + '\u00a0с';
+      var i = phrase(s);
+      if (i !== shown) {
+        shown = i;
+        if (reduced) {
+          elText.textContent = lines[i].t;
+        } else {
+          elText.style.opacity = '0';
+          setTimeout(function () {
+            elText.textContent = lines[i].t;
+            elText.style.opacity = '1';
+          }, 260);
+        }
+      }
     }
     tick();
     setInterval(tick, 1000);
   })();
 
   /* ======================================================================
-     3. Сетка недель жизни: 52 столбца × 80 лет
+     3. Год как на ладони: 365 клеток одного прожитого года.
+        Клетки заливаются волной, рядом набегают итоги.
      ====================================================================== */
-  var life = (function lifeGrid() {
-    var cv = document.getElementById('life-canvas');
-    if (!cv) return { set: function () {} };
+  (function yearGrid() {
+    var cv = document.getElementById('year-canvas');
+    var list = document.getElementById('year-list');
+    if (!cv || !list) return;
     var ctx = cv.getContext('2d');
-    var YEARS = 80, WEEKS = 52, TOTAL = YEARS * WEEKS;   // столбец — год, строка — неделя года
-    var PAD_L = 26, PAD_T = 18, PAD_B = 22;
+    var DAYS = 365;
+    var COLS = 0, size = 0, gap = 0, W = 0, H = 0;
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
-    var gap, size, W, H, gridW;
-    var target = 0, shown = 0, raf = 0, pulse = 0;
+
+    // Чем был занят год. Сумма n по всем группам — 365.
+    var groups = [
+      { name: 'дней с тренировкой', n: 112, color: [201, 138, 78] },
+      { name: 'семейных вечеров', n: 48, color: [224, 127, 184] },
+      { name: 'дней за книгой', n: 63, color: [96, 72, 195] },
+      { name: 'дней в поездках', n: 21, color: [242, 217, 107] },
+      { name: 'дней работы над проектом', n: 96, color: [115, 211, 131] },
+      { name: 'визитов к врачу и забот о здоровье', n: 25, color: [126, 90, 140] }
+    ];
+    var cells = [];
+    groups.forEach(function (g, gi) { for (var i = 0; i < g.n; i++) cells.push(gi); });
+    // перемешиваем детерминированно, чтобы год выглядел живым, а не полосами
+    var seed = 7;
+    for (var i = cells.length - 1; i > 0; i--) {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      var j = seed % (i + 1);
+      var tmp = cells[i]; cells[i] = cells[j]; cells[j] = tmp;
+    }
+
+    list.innerHTML = groups.map(function (g, gi) {
+      return '<li><em style="background:rgb(' + g.color.join(',') + ')"></em>' +
+        '<b data-n="' + gi + '">0</b> <span>' + g.name + '</span></li>';
+    }).join('');
+    var outs = Array.prototype.slice.call(list.querySelectorAll('b'));
 
     function layout() {
       var avail = cv.parentNode.clientWidth;
-      gap = avail < 620 ? 1 : 2;
-      var maxSize = avail < 620 ? 6 : 11;
-      size = Math.min((avail - PAD_L - gap * (YEARS - 1)) / YEARS, maxSize);
-      gridW = YEARS * size + (YEARS - 1) * gap;
-      W = PAD_L + gridW;
-      H = PAD_T + WEEKS * size + (WEEKS - 1) * gap + PAD_B;
+      COLS = avail < 620 ? 21 : (avail < 900 ? 26 : 31);
+      gap = avail < 620 ? 2 : 3;
+      var maxSize = avail < 620 ? 14 : 18;
+      size = Math.min((avail - gap * (COLS - 1)) / COLS, maxSize);
+      var rows = Math.ceil(DAYS / COLS);
+      W = COLS * size + (COLS - 1) * gap;
+      H = rows * size + (rows - 1) * gap;
       cv.style.width = W + 'px';
       cv.style.height = H + 'px';
       cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
-    var EARLY = [88, 66, 200], LATE = [232, 150, 72];
-    function mix(k0) {
-      var k = Math.max(0, Math.min(1, k0));
-      return 'rgb(' + Math.round(EARLY[0] + (LATE[0] - EARLY[0]) * k) + ',' +
-        Math.round(EARLY[1] + (LATE[1] - EARLY[1]) * k) + ',' +
-        Math.round(EARLY[2] + (LATE[2] - EARLY[2]) * k) + ')';
-    }
-    function xOf(year) { return PAD_L + year * (size + gap); }
-    function yOf(week) { return PAD_T + week * (size + gap); }
+    var filled = 0, raf = 0, t0 = 0, played = false;
 
     function draw() {
       ctx.clearRect(0, 0, W, H);
-      var lived = Math.round(shown);
-      var cur = Math.max(6, lived / WEEKS);          // цвет тянется от рождения до «сейчас»
-      for (var y = 0; y < YEARS; y++) {
-        var col = mix(y / cur);
-        for (var w = 0; w < WEEKS; w++) {
-          var i = y * WEEKS + w;
-          var x = xOf(y), yy = yOf(w);
-          if (i < lived) {
-            ctx.fillStyle = col;
-            ctx.globalAlpha = 0.34 + 0.62 * Math.min(1, y / cur);
-            ctx.fillRect(x, yy, size, size);
-            ctx.globalAlpha = 1;
-          } else if (i === lived) {
-            var a = 0.6 + 0.4 * Math.sin(pulse / 380);
-            ctx.fillStyle = 'rgba(115,211,131,' + a.toFixed(3) + ')';
-            ctx.fillRect(x - 0.5, yy - 0.5, size + 1, size + 1);
-          } else {
-            ctx.fillStyle = 'rgba(255,255,255,0.06)';
-            ctx.fillRect(x, yy, size, size);
-          }
+      for (var i = 0; i < DAYS; i++) {
+        var x = (i % COLS) * (size + gap);
+        var y = Math.floor(i / COLS) * (size + gap);
+        if (i < filled) {
+          var c = groups[cells[i]].color;
+          ctx.fillStyle = 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+          ctx.globalAlpha = 0.72;
+          ctx.fillRect(x, y, size, size);
+          ctx.globalAlpha = 1;
+        } else {
+          ctx.fillStyle = 'rgba(255,255,255,0.05)';
+          ctx.fillRect(x, y, size, size);
         }
       }
-
-      // тонкие разделители десятилетий
-      ctx.fillStyle = 'rgba(255,255,255,0.28)';
-      for (var dd = 10; dd < YEARS; dd += 10) {
-        ctx.fillRect(xOf(dd) - gap, PAD_T, Math.max(1, gap * 0.6), WEEKS * (size + gap) - gap);
-      }
-
-      ctx.font = '11px "Ubuntu Mono", monospace';
-      // ось лет внизу
-      ctx.fillStyle = 'rgba(255,255,255,0.3)';
-      ctx.textBaseline = 'top';
-      ctx.textAlign = 'center';
-      var axisY = PAD_T + WEEKS * (size + gap) + 6;
-      for (var d = 0; d < YEARS; d += 10) {
-        ctx.fillText(String(d), xOf(d), axisY);
-      }
-      ctx.textAlign = 'right';
-      ctx.fillText('80 лет', PAD_L + gridW, axisY);
-      // подписи слева
-      ctx.fillStyle = 'rgba(255,255,255,0.22)';
-      ctx.save();
-      ctx.translate(11, PAD_T + (WEEKS * (size + gap)) / 2);
-      ctx.rotate(-Math.PI / 2);
-      ctx.textAlign = 'center';
-      ctx.fillText('недели года', 0, -5);
-      ctx.restore();
-      // метка «сейчас»
-      var curYear = Math.min(YEARS - 1, Math.floor(lived / WEEKS));
-      var cx = xOf(curYear) + size / 2;
-      ctx.strokeStyle = 'rgba(115,211,131,0.55)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(xOf(curYear) - 1.5, PAD_T - 1.5, size + 3, WEEKS * (size + gap) - gap + 3);
-      ctx.strokeStyle = 'rgba(115,211,131,0.45)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(cx, PAD_T - 8); ctx.lineTo(cx, PAD_T - 2);
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(115,211,131,0.85)';
-      ctx.textAlign = cx > PAD_L + gridW - 60 ? 'right' : 'left';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText('вы здесь', ctx.textAlign === 'right' ? cx + 4 : cx - 4, PAD_T - 7);
-      ctx.textBaseline = 'top';
-      ctx.textAlign = 'left';
+      var counts = groups.map(function () { return 0; });
+      for (var k = 0; k < filled; k++) counts[cells[k]]++;
+      outs.forEach(function (b, gi) { b.textContent = num(counts[gi]); });
     }
 
     function frame(now) {
-      pulse = now;
-      var diff = target - shown;
-      shown += Math.abs(diff) < 0.6 ? diff : diff * 0.09;
+      if (!t0) t0 = now;
+      var p = Math.min(1, (now - t0) / 2600);
+      filled = Math.round(DAYS * (1 - Math.pow(1 - p, 2)));
       draw();
-      raf = requestAnimationFrame(frame);
+      if (p < 1) raf = requestAnimationFrame(frame); else raf = 0;
     }
 
-    layout();
-    window.addEventListener('resize', function () { layout(); draw(); });
+    function play() {
+      if (played) return; played = true;
+      if (reduced) { filled = DAYS; draw(); return; }
+      t0 = 0; raf = requestAnimationFrame(frame);
+    }
 
-    return {
-      set: function (weeks) {
-        target = Math.max(0, Math.min(TOTAL, weeks));
-        if (reduced) { shown = target; draw(); return; }
-        if (!raf) raf = requestAnimationFrame(frame);
-      },
-      total: TOTAL
-    };
+    layout(); draw();
+    var rt;
+    window.addEventListener('resize', function () {
+      clearTimeout(rt);
+      rt = setTimeout(function () { layout(); draw(); }, 160);
+    });
+
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (es, obs) {
+        es.forEach(function (e) { if (e.isIntersecting) { play(); obs.disconnect(); } });
+      }, { threshold: 0.25 }).observe(cv);
+    } else play();
   })();
 
   /* ======================================================================
-     4. Расчёт по году рождения
+     4. Сколько времени остаётся под цели этого года
      ====================================================================== */
-  (function lifeStats() {
-    var input = document.getElementById('birth');
-    var range = document.getElementById('birth-range');
+  (function goalStats() {
+    var input = document.getElementById('goals');
+    var range = document.getElementById('goals-range');
     if (!input || !range) return;
     var out = {
-      lived: document.getElementById('st-lived'),
-      left: document.getElementById('st-left'),
       days: document.getElementById('st-days'),
-      share: document.getElementById('st-share')
+      hours: document.getElementById('st-hours'),
+      per: document.getElementById('st-per'),
+      week: document.getElementById('st-week')
     };
-    var YEARS = 80, TOTAL = 52 * YEARS;
+    var FREE_PER_DAY = 3;
 
-    function apply(year, animate) {
+    function daysLeft() {
       var now = new Date();
-      var age = now.getFullYear() - year + (now.getMonth() + now.getDate() / 31) / 12;
-      if (age < 0) age = 0;
-      if (age > YEARS) age = YEARS;
-      var lived = Math.round(age * 52);
-      var left = TOTAL - lived;
-      out.lived.textContent = num(lived);
-      out.left.textContent = num(left);
-      out.days.textContent = num(left * 7);
-      out.share.textContent = Math.round(lived / TOTAL * 100) + '\u2009%';
-      life.set(animate === false ? lived : lived);
+      var end = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+      return Math.max(1, Math.ceil((end - now) / 86400000));
     }
 
-    function onYear(v) {
-      var year = parseInt(v, 10);
-      if (isNaN(year)) return;
-      year = Math.max(1930, Math.min(new Date().getFullYear(), year));
-      input.value = year; range.value = year;
-      apply(year);
+    function update(n) {
+      var goals = Math.max(1, Math.min(12, Math.round(Number(n) || 1)));
+      var days = daysLeft();
+      var hours = days * FREE_PER_DAY;
+      out.days.textContent = num(days);
+      out.hours.textContent = num(hours);
+      out.per.textContent = num(hours / goals);
+      out.week.textContent = (Math.round((hours / goals) / (days / 7) * 10) / 10)
+        .toString().replace('.', ',');
     }
 
-    input.addEventListener('input', function () { if (this.value.length === 4) onYear(this.value); });
-    input.addEventListener('change', function () { onYear(this.value); });
-    range.addEventListener('input', function () { onYear(this.value); });
-    apply(parseInt(input.value, 10));
+    function sync(v, from) {
+      var goals = Math.max(1, Math.min(12, Math.round(Number(v) || 1)));
+      if (from !== 'input') input.value = goals;
+      if (from !== 'range') range.value = goals;
+      update(goals);
+    }
+
+    input.addEventListener('input', function () { sync(input.value, 'input'); });
+    input.addEventListener('change', function () { sync(input.value, ''); });
+    range.addEventListener('input', function () { sync(range.value, 'range'); });
+    sync(input.value, '');
   })();
 
   /* ======================================================================
@@ -407,6 +430,53 @@
       });
     }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
     Array.prototype.forEach.call(items, function (el) { io.observe(el); });
+  })();
+
+  /* ======================================================================
+     7. Заявка от компании: отправка без перезагрузки страницы
+     ====================================================================== */
+  (function leadForm() {
+    var form = document.getElementById('lead-form');
+    var msg = document.getElementById('lead-msg');
+    if (!form || !msg) return;
+    var btn = form.querySelector('button[type=submit]');
+
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var data = {
+        name: form.name.value.trim(),
+        company: form.company.value.trim(),
+        contact: form.contact.value.trim(),
+        telegram: form.telegram.value.trim(),
+        message: form.message.value.trim()
+      };
+      if (data.name.length < 2) { show('Напишите, как к\u00a0вам обращаться', true); return; }
+      if (!data.contact && !data.telegram) { show('Оставьте почту, телефон или ник в\u00a0телеграме', true); return; }
+      if (data.message.length < 5) { show('Опишите задачу хотя бы коротко', true); return; }
+
+      btn.disabled = true;
+      show('Отправляем…', false);
+      fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (d) {
+          if (!r.ok) throw new Error(d.error || 'Не удалось отправить. Попробуйте позже.');
+          return d;
+        });
+      }).then(function () {
+        form.reset();
+        show('Спасибо, вернёмся с\u00a0ответом', false);
+      }).catch(function (e) {
+        show(e.message, true);
+      }).then(function () { btn.disabled = false; });
+    });
+
+    function show(text, bad) {
+      msg.textContent = text;
+      msg.classList.toggle('bad', !!bad);
+    }
   })();
 
 })();
