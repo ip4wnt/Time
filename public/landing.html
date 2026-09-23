@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>ХРОНУМ — дневник времени</title>
+  <meta name="description" content="Хронум — дневник времени: часы, дни и месяцы вашей жизни в одной сетке. Видно, куда уходит день и сколько времени остаётся.">
+  <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Ubuntu+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/landing.css">
+</head>
+<body>
+
+<header class="top">
+  <a class="brand" href="/" aria-label="Хронум, на главную">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="2" y="2" width="12" height="12" fill="currentColor"/>
+      <rect x="18" y="2" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <rect x="2" y="18" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <rect x="18" y="18" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    </svg>
+    <span class="brand-name">ХРОНУМ</span>
+  </a>
+  <nav class="top-nav">
+    <a href="#life">Сколько&nbsp;осталось</a>
+    <a href="#what">Что&nbsp;внутри</a>
+    <a class="btn btn-ghost" href="/">Войти</a>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ─────────────── герой ─────────────── -->
+  <section class="hero">
+    <canvas id="hero-canvas" aria-hidden="true"></canvas>
+    <div class="hero-in">
+      <p class="eyebrow">дневник времени</p>
+      <h1>
+        Время нельзя вернуть.<br>
+        <span class="accent">Можно только заметить.</span>
+      </h1>
+      <p class="lead">
+        Хронум показывает вашу жизнь так, как она устроена на&nbsp;самом деле:
+        часами, днями и&nbsp;месяцами в&nbsp;одной сетке. Каждая клетка&nbsp;— отрезок,
+        который уже потрачен или ещё нет.
+      </p>
+      <p class="ticker" id="ticker" aria-live="off">
+        Вы&nbsp;на&nbsp;этой странице <b id="ticker-time">0&nbsp;с</b>. Этого отрезка больше нет.
+      </p>
+      <div class="cta">
+        <a class="btn btn-solid" href="/">Начать вести день</a>
+        <a class="btn btn-ghost" href="#life">Посмотреть, сколько осталось</a>
+      </div>
+    </div>
+    <div class="hero-foot">
+      <span class="hint">один квадрат&nbsp;— один час чьей-то жизни</span>
+    </div>
+  </section>
+
+  <!-- ─────────────── сетка жизни ─────────────── -->
+  <section class="life reveal" id="life">
+    <div class="wrap">
+      <p class="eyebrow">арифметика без утешений</p>
+      <h2>Жизнь целиком укладывается в&nbsp;одну сетку</h2>
+      <p class="text">
+        Восемьдесят лет&nbsp;— это 4&nbsp;160 недель. Не&nbsp;абстрактная вечность,
+        а&nbsp;сетка, которая целиком видна на&nbsp;одном экране. Укажите год рождения
+        и&nbsp;посмотрите, где вы&nbsp;сейчас.
+      </p>
+
+      <div class="life-ctl">
+        <label for="birth">Год рождения</label>
+        <input id="birth" type="number" min="1930" max="2026" step="1" value="1988" inputmode="numeric">
+        <input id="birth-range" type="range" min="1930" max="2026" step="1" value="1988" aria-label="Год рождения, ползунок">
+      </div>
+
+      <div class="life-grid">
+        <canvas id="life-canvas" aria-label="Сетка недель жизни"></canvas>
+      </div>
+
+      <div class="stats" id="stats">
+        <div class="stat"><b id="st-lived">—</b><span>недель прожито</span></div>
+        <div class="stat"><b id="st-left">—</b><span>недель впереди</span></div>
+        <div class="stat"><b id="st-days">—</b><span>дней впереди</span></div>
+        <div class="stat"><b id="st-share">—</b><span>пути пройдено</span></div>
+      </div>
+
+      <p class="note">
+        Это не&nbsp;мрачная статистика, а&nbsp;масштаб. Пустых клеток меньше, чем кажется,
+        и&nbsp;ровно поэтому имеет смысл знать, на&nbsp;что уходит каждая.
+      </p>
+    </div>
+  </section>
+
+  <!-- ─────────────── один день ─────────────── -->
+  <section class="day reveal" id="day">
+    <div class="wrap">
+      <p class="eyebrow">ближе к&nbsp;земле</p>
+      <h2>Из&nbsp;одного дня остаётся три часа</h2>
+      <p class="text">
+        Сутки кажутся длинными, пока их&nbsp;не&nbsp;разложить по&nbsp;часам.
+        Сон, работа, дорога и&nbsp;быт забирают почти всё.
+      </p>
+
+      <div class="hours" id="hours" aria-hidden="true"></div>
+      <div class="legend" id="legend"></div>
+
+      <p class="note" id="day-note">
+        Свободного остаётся три часа из&nbsp;двадцати четырёх. Именно они решают,
+        будет ли&nbsp;сделано то, что для вас важно&nbsp;— и&nbsp;именно они исчезают
+        незаметнее всего.
+      </p>
+    </div>
+  </section>
+
+  <!-- ─────────────── что внутри ─────────────── -->
+  <section class="what reveal" id="what">
+    <div class="wrap">
+      <p class="eyebrow">как это работает</p>
+      <h2>Заметить&nbsp;— значит записать</h2>
+      <p class="text">
+        Хронум не&nbsp;ставит целей и&nbsp;не&nbsp;подгоняет. Он&nbsp;делает одно:
+        превращает прошедшее время в&nbsp;картинку, на&nbsp;которую можно смотреть.
+      </p>
+
+      <div class="cards">
+        <article class="card">
+          <div class="shot"><img src="img/landing/day.png" alt="Экран дня: сетка из двадцати четырёх часов" loading="lazy" width="905" height="795"></div>
+          <h3>День по&nbsp;часам</h3>
+          <p>
+            Двадцать четыре клетки. Отмечаете занятие&nbsp;— часы закрашиваются,
+            и&nbsp;сразу видно, сколько дня ушло на&nbsp;работу, сколько на&nbsp;отдых,
+            а&nbsp;сколько просто растворилось.
+          </p>
+        </article>
+        <article class="card">
+          <div class="shot"><img src="img/landing/month.png" alt="Экран месяца: календарь с закрашенными днями" loading="lazy" width="905" height="795"></div>
+          <h3>Месяц одним взглядом</h3>
+          <p>
+            Дни складываются в&nbsp;полотно. Плотные недели и&nbsp;пустые полосы
+            видны без отчётов: картина месяца читается за&nbsp;пару секунд.
+          </p>
+        </article>
+        <article class="card">
+          <div class="shot"><img src="img/landing/entries.png" alt="Список записей за месяц" loading="lazy" width="905" height="594"></div>
+          <h3>История, а&nbsp;не&nbsp;список дел</h3>
+          <p>
+            К&nbsp;часам добавляются задачи, мысли, траты, еда и&nbsp;настроение.
+            Через год записи складываются в&nbsp;хронику, по&nbsp;которой видно,
+            чем на&nbsp;самом деле была занята жизнь.
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────── финал ─────────────── -->
+  <section class="closing reveal">
+    <div class="wrap narrow">
+      <h2>Зачем это сделано</h2>
+      <p class="text big">
+        Я&nbsp;завёл такой дневник для себя. Не&nbsp;из&nbsp;тревоги, а&nbsp;из&nbsp;простого
+        расчёта: времени у&nbsp;меня конечное количество, и&nbsp;хочется успеть то,
+        что имеет значение. Незаписанный день растворяется бесследно,
+        записанный становится частью понятной картины.
+      </p>
+      <p class="text">
+        Хронум делает эту картину видимой. Дальше уже ваше дело&nbsp;— что с&nbsp;ней
+        сделать.
+      </p>
+      <div class="cta">
+        <a class="btn btn-solid" href="/">Открыть Хронум</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <span>ХРОНУМ</span>
+  <span class="muted">дневник времени · hronum.ru</span>
+</footer>
+
+<script src="js/landing.js"></script>
+</body>
+</html>
