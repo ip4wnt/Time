@@ -48,6 +48,8 @@ export async function renderAdd(q) {
   // в режиме еды/мысли/счётчика сразу заводим новую запись этого вида (поверх уже существующих в этих часах)
   let focusNew = false;
   if (!entries.length || (!editId && kind !== 'activity' && kind !== 'task')) { entries.push(blank(kind)); focusNew = entries.length > 1; }
+  // выбрано «занятие» для часов, где пока только счетчик, еда или мысль: даем заполнить занятие первым блоком
+  else if (!editId && kind === 'activity' && !entries.some((e) => e.kind === 'activity')) entries.unshift(blank('activity'));
 
   function blank(k) {
     return { id: null, kind: k, day, hours: [...selHours], days: [...selDays], activity_id: null, tag_id: null, text: '', mood: 'neutral', kcal: null, protein: null, fat: null, carbs: null, food_calc: null, counter_id: state.counters[0]?.id || null, counter_value: null, done: false, files: [], pending: [] };
@@ -144,7 +146,8 @@ export async function renderAdd(q) {
     tools.querySelector('[data-act=remove]').onclick = async () => {
       if (en.id) { const ok = await confirm('Удалить эту запись?', 'удалить'); if (!ok) return; removed.push(en.id); }
       entries.splice(i, 1);
-      if (!entries.length) entries.push(blank(kind));
+      // после удаления последней записи час свободен — предлагаем занятие, а не новый пустой счетчик
+      if (!entries.length) entries.push(blank(isTaskSel || en.kind === 'task' ? 'task' : 'activity'));
       draw();
     };
     tools.querySelector('[data-act=attach]').onclick = () => pickFiles(en, el);
@@ -401,7 +404,7 @@ export async function renderAdd(q) {
       if (en.kind === 'food') Object.assign(base, { kcal: en.kcal, protein: en.protein, fat: en.fat, carbs: en.carbs, food_calc: en.food_calc });
       if (en.kind === 'counter') Object.assign(base, { counter_id: en.counter_id, counter_value: en.counter_value });
       // пустые новые записи не сохраняем
-      const empty = !en.id && !en.text.trim() && !en.activity_id && en.kind !== 'counter' && !en.pending.length && !(en.kind === 'food' && en.kcal != null);
+      const empty = !en.id && !en.text.trim() && !en.activity_id && !(en.kind === 'counter' && en.counter_value != null) && !en.pending.length && !(en.kind === 'food' && en.kcal != null);
       if (!empty) { upsert.push(base); upsertEntries.push(en); }
     });
     if (!upsert.length && !removed.length) { location.hash = back; return; }
