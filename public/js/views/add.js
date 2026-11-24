@@ -425,7 +425,64 @@ export async function renderAdd(q) {
   drawHeader();
   draw();
   if (focusNew) { const last = list.lastElementChild; last?.scrollIntoView({ block: 'start' }); last?.querySelector('textarea, input')?.focus(); }
-  return () => { document.body.classList.remove(`bg-add-${bgKind}`); };
+
+  // ---- клавиатура (десктоп): ←/→ цвет, пробел — тег, пробел — текст, Enter сохранить, Esc отмена, Delete удалить
+  let kbMode = 'color';
+  const primary = () => entries.findIndex((e) => e.kind === 'activity' || e.kind === 'task');
+  function kbEl() { const i = primary(); return i < 0 ? null : list.children[i]; }
+  function kbRefresh() {
+    document.querySelectorAll('.kb').forEach((n) => n.classList.remove('kb'));
+    const el = kbEl(); if (!el) return;
+    if (kbMode === 'color') el.querySelector('.swatches')?.classList.add('kb');
+    else if (kbMode === 'tag') el.querySelector('.tags')?.classList.add('kb');
+  }
+  function onKey(e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (document.querySelector('.dlg-back')) return;
+    const el = kbEl(); if (!el) return;
+    const ta = el.querySelector('textarea');
+    const t = e.target;
+    const inField = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+    if (inField && t !== ta) return;
+    if (t === ta) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
+      else if (e.key === 'Escape') { e.preventDefault(); location.hash = back; }
+      return;
+    }
+    const en = entries[primary()];
+    if (e.key === 'Enter') { e.preventDefault(); save(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); location.hash = back; return; }
+    if (e.key === 'Delete') {
+      e.preventDefault();
+      if (!en.id) return;
+      confirm('Удалить эту запись?', 'удалить').then((ok) => { if (!ok) return; removed.push(en.id); entries.splice(primary(), 1); save(); });
+      return;
+    }
+    if (e.key === ' ') {
+      e.preventDefault();
+      const hasTags = !!el.querySelector('.tags .chip:not(.edit)');
+      if (kbMode === 'color' && hasTags) kbMode = 'tag';
+      else { kbMode = 'text'; kbRefresh(); ta?.focus(); const n = ta?.value.length || 0; ta?.setSelectionRange(n, n); return; }
+      kbRefresh(); return;
+    }
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const d = e.key === 'ArrowRight' ? 1 : -1;
+    if (kbMode === 'color') {
+      const btns = [...el.querySelectorAll('.swatches .swatch')];
+      const cur = Math.max(0, btns.findIndex((b) => b.classList.contains('on')));
+      btns[(cur + d + btns.length) % btns.length].click();
+    } else if (kbMode === 'tag') {
+      const chips = [...el.querySelectorAll('.tags .chip:not(.edit)')];
+      const cur = chips.findIndex((b) => b.classList.contains('on')); // -1 = без тега
+      let nx = cur + d; if (nx < -1) nx = chips.length - 1; if (nx >= chips.length) nx = -1;
+      if (nx === -1) chips[cur]?.click(); else chips[nx].click();
+    }
+    kbRefresh();
+  }
+  window.addEventListener('keydown', onKey);
+  kbRefresh();
+  return () => { window.removeEventListener('keydown', onKey); document.body.classList.remove(`bg-add-${bgKind}`); };
 }
 
 function daysLabel(days) {

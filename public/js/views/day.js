@@ -7,7 +7,7 @@ import {
 import { h, toast } from '../ui.js';
 import { put } from '../api.js';
 import {
-  calHeader, dayPicker, filtersBar, activeFilters, cellRows, filterButton, sumLine, sumSep, hiddenInSummary,
+  calHeader, dayPicker, filtersBar, activeFilters, cellRows, hourChart, hourKey, sumLine, sumSep, hiddenInSummary,
   addBlock, selHeader, ROW_NEUTRAL,
 } from './common.js';
 
@@ -39,9 +39,45 @@ export async function renderDay(day, query = {}) {
   const norm = kcalNorm();
   const imp = isImportant(day);
 
+  // клавиатура: стрелки двигают выделение часа, Shift+стрелки растягивают диапазон
+  let kbCursor = null; let kbAnchor = null;
+  function goAdd(kind) {
+    const back = encodeURIComponent(`#/day/${day}`);
+    const hrs = selectedHours().join(',');
+    location.hash = kind === 'task'
+      ? `#/add?days=${day}&hours=${hrs}&kind=task&back=${back}`
+      : `#/add?day=${day}&hours=${hrs}&kind=${kind}&back=${back}`;
+  }
+  const ARROW = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -6, ArrowDown: 6 };
+  function onKey(e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    if (state.menuOpen || document.querySelector('.dlg-back')) return;
+    if (e.key in ARROW) {
+      e.preventDefault();
+      if (kbCursor === null) {
+        if (selMode && state.selection.size) { kbCursor = Math.min(...state.selection); kbAnchor = kbCursor; }
+        else { kbCursor = isToday ? nowHour : 0; kbAnchor = kbCursor; selMode = true; state.selection = new Set([kbCursor]); draw(); return; } // первое нажатие только показывает квадрат
+      }
+      const next = kbCursor + ARROW[e.key];
+      if (next < 0 || next > 23) return;
+      kbCursor = next;
+      if (!e.shiftKey) kbAnchor = next;
+      const lo = Math.min(kbAnchor, kbCursor); const hi = Math.max(kbAnchor, kbCursor);
+      state.selection = new Set(Array.from({ length: hi - lo + 1 }, (_, i) => lo + i));
+      selMode = true; draw();
+    } else if (e.key === 'Enter' && selMode && state.selection.size) {
+      e.preventDefault(); goAdd('activity');
+    } else if (e.key === 'Escape' && selMode) {
+      e.preventDefault(); exitSel();
+    }
+  }
+  window.addEventListener('keydown', onKey);
+
   function selectedHours() { return [...state.selection].sort((a, b) => a - b); }
 
-  function exitSel() { selMode = false; state.selection.clear(); draw(); }
+  function exitSel() { selMode = false; kbCursor = null; kbAnchor = null; state.selection.clear(); draw(); }
 
   function drawHeader() {
     hdrHost.innerHTML = '';
@@ -109,7 +145,7 @@ export async function renderDay(day, query = {}) {
       else if (f === 'task') drawTasks();
       else if (f === 'thought') drawThoughts();
     }
-    drawGraph();
+    drawChart();
   }
 
   // наложения на ячейку часа
@@ -154,6 +190,7 @@ export async function renderDay(day, query = {}) {
       if (!sweeping) return;
       sweeping = false;
       if (!state.selection.size) selMode = false;
+      kbCursor = null; kbAnchor = null;
       draw();
     };
     g.addEventListener('pointerup', end);
@@ -209,29 +246,11 @@ export async function renderDay(day, query = {}) {
     colR.appendChild(box);
   }
 
-  function drawGraph() {
-    const bar = h('<div class="infobar"></div>');
-    bar.appendChild(filterButton(() => draw()));
-    colR.appendChild(bar);
-    const gEl = h('<div class="daygraph"></div>');
-    for (let hr = 0; hr < 24; hr++) {
-      const col = h(`<div class="col ${hr > 0 && hr % 6 === 0 ? 'sep' : ''}"></div>`);
-      const items = hm[hr].all.filter((e) => !state.hiddenKinds.has(e.kind) && !(e.kind === 'activity' && isSleepEvent(e)));
-      const mainAct = items.find((e) => e.kind === 'activity');
-      const marks = [];
-      if (mainAct) marks.push(`<i style="background:${grad(activity(mainAct.activity_id)?.color || '#DEDEDE', 135)}"></i>`);
-      for (const e of items) {
-        if (e === mainAct) continue;
-        if (e.kind === 'activity') marks.push(`<i style="background:${grad(activity(e.activity_id)?.color || '#DEDEDE', 135)}"></i>`);
-        else if (e.kind === 'thought') marks.push(`<span class="dk" style="color:${MOOD_COLOR[e.mood || 'neutral']}">${I[MOOD_ICON[e.mood || 'neutral']]}</span>`);
-        else marks.push(`<span class="dk">${I[KIND_ICON[e.kind]]}</span>`);
-      }
-      if (!marks.length) marks.push('<i class="empty"></i>');
-      const shown = marks.slice(0, 8);
-      col.innerHTML = shown.join('') + (marks.length > 8 ? `<span class="more">+${marks.length - 8}</span>` : '');
-      gEl.appendChild(col);
-    }
-    colR.appendChild(gEl);
+  // диаграмма дня: сколько часов на какое занятие
+  function drawChart() {
+    const counts = new Map();
+    for (let hr = 0; hr < 24; hr++) { const k = hourKey(hm[hr]); counts.set(k, (counts.get(k) || 0) + 1); }
+    colR.appendChild(hourChart(counts, 24));
   }
 
   function drawFood() {
@@ -285,5 +304,5 @@ export async function renderDay(day, query = {}) {
   }
 
   draw();
-  return () => { document.querySelectorAll('.selbar').forEach((b) => b.remove()); document.body.classList.remove('bg-day', 'bg-hours'); };
+  return () => { window.removeEventListener('keydown', onKey); document.querySelectorAll('.selbar').forEach((b) => b.remove()); document.body.classList.remove('bg-day', 'bg-hours'); };
 }

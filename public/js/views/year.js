@@ -5,7 +5,7 @@ import {
   MONTHS_FULL, MONTHS_GEN, daysInMonth, esc, grad, hoursLabel, MOOD_COLOR,
 } from '../state.js';
 import { h } from '../ui.js';
-import { calHeader, addBlock, selHeader, sumLine } from './common.js';
+import { calHeader, addBlock, selHeader, sumLine, hourChart } from './common.js';
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 8;
@@ -79,7 +79,7 @@ export async function renderYear(yearStr, query = {}) {
       }
     }
     block.appendChild(g);
-    block.appendChild(monthChart(counts, n * 24));
+    block.appendChild(hourChart(counts, n * 24));
     canvas.appendChild(block);
   }
 
@@ -239,25 +239,4 @@ function yearPicker(year, onPick) {
   }
   draw();
   return pop;
-}
-
-// Диаграмма месяца: полоса по долям и легенда (процент, под ним число часов).
-// Порядок цветов — как в настройках; клетки без занятия идут последними.
-function monthChart(counts, total) {
-  const items = [];
-  for (const a of state.activities) {
-    const n = counts.get(a.id);
-    if (n) items.push({ n, color: a.is_sleep ? '#262126' : a.color, name: a.name });
-  }
-  // занятия, которых уже нет в настройках, и пустые часы
-  const known = new Set(state.activities.map((a) => a.id));
-  let rest = counts.get('empty') || 0;
-  for (const [k, n] of counts) if (k !== 'empty' && !known.has(k)) rest += n;
-  if (rest) items.push({ n: rest, color: '#151115', name: 'без записи' });
-  const pct = (n) => { const p = n / total * 100; return p > 0 && p < 1 ? '<1%' : `${Math.round(p)}%`; };
-  const el = h(`<div class="ychart">
-    <div class="ychart-bar">${items.map((i) => `<i style="flex:${i.n};background:${i.color}" title="${esc(i.name)}"></i>`).join('')}</div>
-    <div class="ychart-legend">${items.map((i) => `<div class="yl"><i style="background:${i.color}"></i><span class="yl-p">${pct(i.n)}</span><span class="yl-n">${i.n}</span></div>`).join('')}</div>
-  </div>`);
-  return el;
 }

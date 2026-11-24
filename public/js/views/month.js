@@ -8,7 +8,7 @@ import {
 import { h, toast } from '../ui.js';
 import { put } from '../api.js';
 import {
-  calHeader, monthPicker, filtersBar, activeFilters, cellRows, filterButton, sumLine, sumSep, hiddenInSummary,
+  calHeader, monthPicker, filtersBar, activeFilters, cellRows, hourChart, hourKey, sumLine, sumSep, hiddenInSummary,
   ROW_NEUTRAL, ROW_OVER, ROW_UNDER,
 } from './common.js';
 
@@ -87,7 +87,7 @@ export async function renderMonth(ym, query = {}) {
       else if (f === 'task') drawTasksSummary();
       else if (f === 'thought') drawThoughtsSummary();
     }
-    drawInfographic();
+    drawChart();
   }
 
   // наложения на ячейку дня
@@ -130,42 +130,14 @@ export async function renderMonth(ym, query = {}) {
     colR.appendChild(box);
   }
 
-  function drawInfographic() {
-    const bar = h('<div class="infobar"></div>');
-    bar.appendChild(filterButton(() => draw()));
-    bar.appendChild(h(`<span class="muted" style="font-size:1.5rem">${state.sort === 'weight' ? 'по весу' : 'по времени'}${state.hiddenKinds.size ? ` · скрыто: ${state.hiddenKinds.size}` : ''}</span>`));
-    colR.appendChild(bar);
-    const items = [];
+  // диаграмма месяца: сколько часов на какое занятие (как в представлении года)
+  function drawChart() {
+    const counts = new Map(); let total = 0;
     for (const g of grid) {
       if (!g.inMonth) continue;
-      const hm = hourMap(perDay.get(g.date));
-      for (let hIdx = 0; hIdx < 24; hIdx++) {
-        const acts = hm[hIdx].all;
-        const mainAct = acts.find((x) => x.kind === 'activity');
-        for (const e of acts) {
-          if (state.hiddenKinds.has(e.kind)) continue;
-          if (e.kind === 'activity') { if (e !== mainAct || isSleepEvent(e)) continue; items.push({ t: g.dom * 24 + hIdx, color: activity(e.activity_id)?.color || '#DEDEDE', kind: 'activity', id: e.activity_id }); }
-          else items.push({ t: g.dom * 24 + hIdx, kind: e.kind, mood: e.mood });
-        }
-      }
-      for (const e of perDay.get(g.date)) if (e.kind === 'task' && !state.hiddenKinds.has('task')) items.push({ t: g.dom * 24, kind: 'task', color: activity(e.activity_id)?.color, done: e.done });
+      for (const slot of hourMap(perDay.get(g.date))) { const k = hourKey(slot); counts.set(k, (counts.get(k) || 0) + 1); total++; }
     }
-    let ordered;
-    if (state.sort === 'chrono') ordered = items.sort((a, b) => a.t - b.t);
-    else {
-      const cnt = new Map();
-      for (const it of items) { const k = it.kind === 'activity' ? `a${it.id}` : it.kind; cnt.set(k, (cnt.get(k) || 0) + 1); }
-      ordered = items.sort((a, b) => { const ka = a.kind === 'activity' ? `a${a.id}` : a.kind, kb = b.kind === 'activity' ? `a${b.id}` : b.kind; return (cnt.get(kb) - cnt.get(ka)) || ka.localeCompare(kb) || (a.t - b.t); });
-    }
-    const dots = h('<div class="dots"></div>');
-    for (const it of ordered) {
-      if (it.kind === 'activity') dots.appendChild(h(`<i style="background:${grad(it.color, 135)}"></i>`));
-      else if (it.kind === 'task') dots.appendChild(h(`<span class="dk" style="color:${it.color || '#fff'}">${it.done ? I.check : I.list}</span>`));
-      else if (it.kind === 'thought') dots.appendChild(h(`<span class="dk" style="color:${MOOD_COLOR[it.mood || 'neutral']}">${I[MOOD_ICON[it.mood || 'neutral']]}</span>`));
-      else dots.appendChild(h(`<span class="dk">${I[KIND_ICON[it.kind]]}</span>`));
-    }
-    if (!ordered.length) dots.appendChild(h('<span class="muted" style="grid-column:1/-1;font-size:1.5rem">пусто</span>'));
-    colR.appendChild(dots);
+    colR.appendChild(hourChart(counts, total));
   }
 
   function drawFoodSummary() {

@@ -533,3 +533,5 @@ body.bg-year { overflow: hidden; }
 
 /* выделение часов протяжкой: страница не должна прокручиваться под пальцем */
 .grid-day { touch-action: none; user-select: none; -webkit-user-select: none; }
+
+.swatches.kb,.tags.kb{outline:2px solid rgba(255,255,255,.7);outline-offset:6px;border-radius:12px}

@@ -1,6 +1,6 @@
 // Общие блоки календарных экранов: шапка-крошки, фильтры, выбор даты, строки саммари.
 import { I, KIND_ICON } from '../icons.js';
-import { state, savePrefs, esc, KINDS, MONTHS_FULL, monthGrid, todayStr, ymOf, addMonths, WEEKDAYS, activeActivities } from '../state.js';
+import { state, savePrefs, esc, activity, isSleepEvent, KINDS, MONTHS_FULL, monthGrid, todayStr, ymOf, addMonths, WEEKDAYS, activeActivities } from '../state.js';
 import { h } from '../ui.js';
 
 // Порядок кнопок-фильтров под сеткой — как в макете.
@@ -281,4 +281,31 @@ export function sumLine(key, text, { done = false, files = 0, onClick, prefix = 
   const el = h(`<button class="sum-line"><span class="k">${esc(key)}</span><span class="t ${done ? 'done' : ''}">${done ? `<span class="done-ck">${I.checkBold}</span>` : ''}${prefix}${esc(text)}</span>${files ? `<span class="files">${I.paperclip}${files}</span>` : ''}</button>`);
   if (onClick) el.onclick = onClick;
   return el;
+}
+
+// ---------- диаграмма часов (день, месяц, год) ----------
+// ключ часа: id занятия (в том числе сна) или 'empty', если занятия в этом часе нет
+export function hourKey(slot) {
+  const act = slot && slot.all.find((e) => e.kind === 'activity');
+  if (!act) return 'empty';
+  if (isSleepEvent(act)) return act.activity_id;
+  const a = activity(act.activity_id);
+  return a ? a.id : 'empty';
+}
+// полоса по долям и легенда: процент, под ним число часов. Порядок цветов — как в настройках, пустые часы последними.
+export function hourChart(counts, total) {
+  const items = [];
+  for (const a of state.activities) {
+    const n = counts.get(a.id);
+    if (n) items.push({ n, color: a.is_sleep ? '#262126' : a.color, name: a.name });
+  }
+  const known = new Set(state.activities.map((a) => a.id));
+  let rest = counts.get('empty') || 0;
+  for (const [k, n] of counts) if (k !== 'empty' && !known.has(k)) rest += n;
+  if (rest) items.push({ n: rest, color: '#151115', name: 'без записи' });
+  const pct = (n) => { const p = n / total * 100; return p > 0 && p < 1 ? '<1%' : `${Math.round(p)}%`; };
+  return h(`<div class="ychart">
+    <div class="ychart-bar">${items.map((i) => `<i style="flex:${i.n};background:${i.color}" title="${esc(i.name)}"></i>`).join('')}</div>
+    <div class="ychart-legend">${items.map((i) => `<div class="yl"><i style="background:${i.color}"></i><span class="yl-p">${pct(i.n)}</span><span class="yl-n">${i.n}</span></div>`).join('')}</div>
+  </div>`);
 }
