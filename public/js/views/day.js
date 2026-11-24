@@ -78,14 +78,16 @@ export async function renderDay(day, query = {}) {
       if (act && isSleepEvent(act)) cell.classList.add('sleep');
       else if (act) { const a = activity(act.activity_id); if (a) { cell.style.background = grad(a.color); cell.classList.add('colored'); } }
       if (slot.extras.length) cell.classList.add('multi');
-      cell.onclick = () => {
-        if (!selMode) { selMode = true; state.selection = new Set([hr]); draw(); return; }
-        if (state.selection.has(hr)) state.selection.delete(hr); else state.selection.add(hr);
-        if (!state.selection.size) { selMode = false; }
+      // с клавиатуры (Enter/пробел) час переключается обычным нажатием; мышь и палец обрабатывает сетка целиком
+      cell.onclick = (e) => {
+        if (e.detail !== 0) return;
+        if (!selMode) { selMode = true; state.selection = new Set([hr]); } else if (state.selection.has(hr)) state.selection.delete(hr); else state.selection.add(hr);
+        if (!state.selection.size) selMode = false;
         draw();
       };
       g.appendChild(cell);
     }
+    attachSweep(g);
     colL.appendChild(g);
     if (selMode) {
       colL.appendChild(addBlock((kind) => {
@@ -111,6 +113,53 @@ export async function renderDay(day, query = {}) {
   }
 
   // наложения на ячейку часа
+  // выделение протяжкой: нажал на час и повёл мышью/пальцем; первый час определяет действие —
+  // невыделенный выделяет всё, по чему провели, выделенный снимает выделение с тех, по которым провели
+  function attachSweep(g) {
+    let sweeping = false; let erase = false; let last = -1; let moved = false;
+    const hourAt = (x, y) => {
+      const el = document.elementFromPoint(x, y);
+      const c = el && el.closest ? el.closest('.cell[data-hour]') : null;
+      return c && g.contains(c) ? Number(c.dataset.hour) : -1;
+    };
+    // все часы между прошлой и текущей точкой: быстрый жест не должен пропускать клетки
+    const apply = (hr) => {
+      if (hr < 0 || hr === last) return;
+      const from = last < 0 ? hr : last;
+      const step = hr >= from ? 1 : -1;
+      for (let i = from; i !== hr + step; i += step) {
+        if (erase) state.selection.delete(i); else state.selection.add(i);
+        const c = g.querySelector(`.cell[data-hour="${i}"]`);
+        if (c) c.classList.toggle('selected', state.selection.has(i));
+      }
+      last = hr;
+    };
+    g.addEventListener('pointerdown', (e) => {
+      if (e.button !== undefined && e.button > 0) return;
+      const hr = hourAt(e.clientX, e.clientY);
+      if (hr < 0) return;
+      sweeping = true; moved = false; last = -1;
+      erase = selMode && state.selection.has(hr);
+      if (!selMode) { selMode = true; state.selection = new Set(); }
+      try { g.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+      apply(hr);
+      e.preventDefault();
+    });
+    g.addEventListener('pointermove', (e) => {
+      if (!sweeping) return;
+      const hr = hourAt(e.clientX, e.clientY);
+      if (hr >= 0 && hr !== last) { moved = true; apply(hr); }
+    });
+    const end = () => {
+      if (!sweeping) return;
+      sweeping = false;
+      if (!state.selection.size) selMode = false;
+      draw();
+    };
+    g.addEventListener('pointerup', end);
+    g.addEventListener('pointercancel', end);
+  }
+
   function overlays(slot, hr) {
     const out = {};
     const foods = slot.all.filter((e) => e.kind === 'food');
