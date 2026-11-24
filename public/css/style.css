@@ -477,3 +477,28 @@ p.p { color: var(--muted); margin: .6rem 0; font-size: 1.6rem; }
   .cal-l { position: sticky; top: 1.4rem; }
   .cal-r > .summary:first-child, .cal-r > .sum-head:first-child, .cal-r > .infobar:first-child { margin-top: 0; }
 }
+
+/* ---------- год: месяцы друг под другом, строка = сутки из 24 часов ---------- */
+body.bg-year::before { background: linear-gradient(180deg, #58123F 0%, #2A0B20 45.9%, #000000 100%); opacity: .9; }
+body.bg-year { overflow: hidden; }
+.page.year { padding: 0 1.6rem; }
+.year-view {
+  height: calc(100dvh - 6.4rem - 1rem); overflow: auto; position: relative; scrollbar-width: thin; scrollbar-color: #444 transparent;
+  touch-action: pan-x pan-y; overscroll-behavior: contain; -webkit-user-select: none; user-select: none; cursor: grab;
+}
+.year-view::-webkit-scrollbar { width: .6rem; height: .6rem; }
+.year-view::-webkit-scrollbar-thumb { background: #444; }
+.year-canvas { width: 100%; padding-bottom: 4rem; font-size: 1rem; }
+.ymonth { margin-bottom: 2.5em; }
+.ymonth-title { text-align: center; color: var(--text); font-size: 2.5em; line-height: 1; margin: 0 0 1.2em; }
+.ymonth-grid { display: grid; grid-template-columns: repeat(24, 1fr); gap: .15em; background: #000; padding: .15em; }
+.yc { aspect-ratio: 1; background: #151115; border: 0; padding: 0; position: relative; min-width: 0; border-radius: 0; }
+.yc.sleep { background: #262126; }
+.yc.now { outline: .2em solid #81FF96; outline-offset: -.2em; z-index: 1; }
+.yc.selected { outline: .25em solid #fff; outline-offset: -.25em; z-index: 2; }
+.yc.has-extra::after, .yc.has-note::after { content: ''; position: absolute; right: 14%; bottom: 14%; width: 22%; height: 22%; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.4); }
+.yc.has-extra:not(.has-note)::after { background: rgba(255,255,255,.6); }
+.year-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; max-height: 70dvh; overflow-y: auto; background: #0a0a0a; border-top: .1rem solid var(--stroke); padding: 1.6rem 1.82rem calc(2rem + env(safe-area-inset-bottom)); margin: 0 auto; max-width: 60.3rem; }
+.ys-head { display: flex; align-items: center; justify-content: space-between; font-size: 2.2rem; color: var(--text); margin-bottom: 1.2rem; }
+.ys-close { width: 2.2rem; height: 2.2rem; color: var(--text); display: grid; place-items: center; }
+.ys-close svg { width: 100%; height: 100%; }

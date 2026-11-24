@@ -5,6 +5,7 @@ import { state, loadBootstrap, loadPrefs, loadDates, todayStr, ymOf, esc } from 
 import { h, toast } from './ui.js';
 import { renderAuth } from './views/auth.js';
 import { renderMonth } from './views/month.js';
+import { renderYear } from './views/year.js';
 import { renderDay } from './views/day.js';
 import { renderAdd } from './views/add.js';
 import { renderNotes, renderNoteEditor } from './views/notes.js';
@@ -29,6 +30,7 @@ function parseHash() {
 
 const ROUTES = {
   month: (p, q) => renderMonth(p[1] || state.month || ymOf(todayStr()), q),
+  year: (p, q) => renderYear(p[1] || String((state.day || todayStr()).slice(0, 4)), q),
   day: (p, q) => renderDay(p[1] || state.day || todayStr(), q),
   add: (p, q) => renderAdd(q),
   notes: (p) => (p[1] ? renderNoteEditor(Number(p[1])) : renderNotes()),
@@ -65,6 +67,7 @@ function openMenu() {
   const el = h(`<div class="menu"><div class="menu-in">
     <header class="hdr"><button class="hdr-btn" data-act="close" aria-label="закрыть">${I.close}</button><div class="hdr-title"><span>меню</span></div><button class="hdr-btn" data-act="search" aria-label="поиск">${I.search}</button></header>
     <div class="menu-block">
+      <a class="mi" href="#/year">год ${I.year}</a>
       <a class="mi" href="#/month">месяц ${I.calendar}</a>
       <a class="mi" href="#/day">день ${I.clock}</a>
     </div>

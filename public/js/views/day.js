@@ -54,7 +54,7 @@ export async function renderDay(day, query = {}) {
     }
     hdrHost.appendChild(calHeader({
       swapIcon: 'clock',
-      swapTo: () => `#/month/${ymOf(day)}`,
+      swapTo: () => `#/year/${day.slice(0, 4)}`,
       title: dayLabel(day),
       onTitle: () => dayPicker(day, (d) => { location.hash = `#/day/${d}`; }),
     }));

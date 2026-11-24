@@ -137,6 +137,14 @@ export async function loadMonth(ym) {
   state.events.set(ym, r.events);
   return r.events;
 }
+// весь год одним запросом; хранится в том же кеше под ключом 'Y2026'
+export async function loadYear(y) {
+  const key = `Y${y}`;
+  if (state.events.has(key)) return state.events.get(key);
+  const r = await get(`/api/events?from=${y}-01-01&to=${y}-12-31&today=${todayStr()}`);
+  state.events.set(key, r.events);
+  return r.events;
+}
 export async function loadDay(day) {
   const evs = await loadMonth(ymOf(day));
   return eventsOfDay(evs, day);
