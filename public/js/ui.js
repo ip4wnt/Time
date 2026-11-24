@@ -32,11 +32,17 @@ export function dialog({ title, body = '', actions = [{ label: 'ок', value: tr
     const bodyEl = back.querySelector('.dlg-body');
     if (typeof body === 'string') bodyEl.innerHTML = body; else bodyEl.appendChild(body);
     const acts = back.querySelector('.dlg-actions');
-    const close = (v) => { back.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
+    const close = (v) => { back.remove(); document.removeEventListener('keydown', onKey, true); resolve(v); };
     if (cancel) { const b = h(`<button class="btn small ghost">отменить</button>`); b.onclick = () => close(null); acts.appendChild(b); }
     for (const a of actions) { const b = h(`<button class="btn small ${a.cls || ''}">${esc(a.label)}</button>`); b.onclick = () => close(typeof a.value === 'function' ? a.value(bodyEl) : a.value); acts.appendChild(b); }
-    const onKey = (e) => { if (e.key === 'Escape') close(null); if (e.key === 'Enter' && e.target.tagName === 'INPUT') { const last = actions[actions.length - 1]; close(typeof last.value === 'function' ? last.value(bodyEl) : last.value); } };
-    document.addEventListener('keydown', onKey);
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(null); }
+      else if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && actions.length) {
+        e.preventDefault(); e.stopPropagation();
+        const last = actions[actions.length - 1]; close(typeof last.value === 'function' ? last.value(bodyEl) : last.value);
+      }
+    };
+    document.addEventListener('keydown', onKey, true);
     back.addEventListener('click', (e) => { if (e.target === back) close(null); });
     document.getElementById('overlay').appendChild(back);
     if (onOpen) onOpen(bodyEl);

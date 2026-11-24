@@ -450,6 +450,9 @@ export async function renderAdd(q) {
     const inField = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
     if (inField && t !== ta) return;
     if (t === ta) {
+      if (e.key === ' ' && e.shiftKey) { // Shift+пробел из текста — к следующему блоку (колесо: цвет → тег → текст)
+        e.preventDefault(); ta.blur(); kbMode = 'color'; kbRefresh(); return;
+      }
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
       else if (e.key === 'Escape') { e.preventDefault(); location.hash = back; }
       return;
