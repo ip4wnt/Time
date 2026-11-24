@@ -212,3 +212,5 @@ CREATE TABLE IF NOT EXISTS leads (
 );
 CREATE INDEX IF NOT EXISTS leads_created_idx ON leads(created_at DESC);
 CREATE INDEX IF NOT EXISTS leads_ip_idx ON leads(ip, created_at DESC);
+
+ALTER TABLE events ADD COLUMN IF NOT EXISTS planned BOOLEAN NOT NULL DEFAULT false;

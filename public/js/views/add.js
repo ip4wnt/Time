@@ -52,7 +52,7 @@ export async function renderAdd(q) {
   else if (!editId && kind === 'activity' && !entries.some((e) => e.kind === 'activity')) entries.unshift(blank('activity'));
 
   function blank(k) {
-    return { id: null, kind: k, day, hours: [...selHours], days: [...selDays], activity_id: null, tag_id: null, text: '', mood: 'neutral', kcal: null, protein: null, fat: null, carbs: null, food_calc: null, counter_id: state.counters[0]?.id || null, counter_value: null, done: false, files: [], pending: [] };
+    return { id: null, kind: k, day, hours: [...selHours], days: [...selDays], activity_id: null, tag_id: null, text: '', mood: 'neutral', kcal: null, protein: null, fat: null, carbs: null, food_calc: null, counter_id: state.counters[0]?.id || null, counter_value: null, done: false, planned: false, files: [], pending: [] };
   }
   function fromEvent(e) { return { ...e, hours: e.hours || [], days: e.days || [], files: e.files || [], pending: [], text: e.text || '' }; }
 
@@ -192,6 +192,11 @@ export async function renderAdd(q) {
     body.innerHTML = '';
     body.appendChild(swatches(en, redraw));
     body.appendChild(textarea(en, PLACEHOLDER.activity, 'big'));
+    if (en.kind === 'activity') {
+      const pl = h(`<label class="inline" style="margin-top:1.8rem"><input type="checkbox" class="check" ${en.planned ? 'checked' : ''}> план</label>`);
+      pl.querySelector('input').onchange = (e) => { en.planned = e.target.checked; };
+      body.appendChild(pl);
+    }
     const tg = tagsRow(en, redraw);
     if (tg) body.appendChild(tg);
   }
@@ -393,7 +398,7 @@ export async function renderAdd(q) {
     const upsert = [];
     const upsertEntries = [];
     entries.forEach((en, i) => {
-      const base = { id: en.id || undefined, kind: en.kind, position: i, text: en.text, activity_id: en.activity_id, tag_id: en.tag_id, done: en.done };
+      const base = { id: en.id || undefined, kind: en.kind, position: i, text: en.text, activity_id: en.activity_id, tag_id: en.tag_id, done: en.done, planned: en.kind === 'activity' && !!en.planned };
       if (en.kind === 'task') {
         base.days = en.days.length ? en.days : (selDays.length ? selDays : [day]);
         // задачу, добавленную к конкретному часу, привязываем к этому часу

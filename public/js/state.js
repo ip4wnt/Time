@@ -102,6 +102,9 @@ export function darken(hex, k = 0.5) {
   return `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
 // градиент заливки: цвет занятия внизу слева, затемнённый — вверху справа
+// штриховка для запланированных занятий: полосы цвета занятия и темного фона
+export function plannedBg(hex, st = 4) { return `repeating-linear-gradient(135deg, ${hex} 0 ${st}px, #0b0b0b ${st}px ${st * 2}px)`; }
+
 export function grad(hex, deg = 45) { return `linear-gradient(${deg}deg, ${hex} 0%, ${darken(hex)} 100%)`; }
 
 // ---------- справочники ----------
@@ -173,6 +176,11 @@ export function dominantActivity(dayEvents) {
   let best = null;
   for (const [id, n] of cnt) if (!best || n > best.n) best = { id, n };
   return best ? activity(best.id) : null;
+}
+// все ли занятия дня (кроме сна) только запланированы
+export function dayPlanned(dayEvents) {
+  const acts = dayEvents.filter((e) => e.kind === 'activity' && e.activity_id && !isSleepEvent(e));
+  return acts.length > 0 && acts.every((e) => e.planned);
 }
 export function dominantMood(dayEvents) {
   const cnt = {};

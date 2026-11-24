@@ -170,7 +170,7 @@ router.add('GET', '/api/counters/:id/stats', async ({ q, user, params }) => {
 });
 
 // ---------------- events ----------------
-const EVENT_COLS = 'id, kind, day, hours, days, position, activity_id, tag_id, text, mood, kcal, protein, fat, carbs, food_calc, counter_id, counter_value, done, done_at, created_at, updated_at';
+const EVENT_COLS = 'id, kind, day, hours, days, position, activity_id, tag_id, text, mood, kcal, protein, fat, carbs, food_calc, counter_id, counter_value, done, done_at, planned, created_at, updated_at';
 function fmtEvent(e) {
   e.day = dateStr(e.day);
   if (e.days) e.days = e.days.map(dateStr);
@@ -233,6 +233,7 @@ function validateEvent(e) {
   out.counter_value = e.kind === 'counter' && e.counter_value != null && e.counter_value !== '' ? Number(e.counter_value) : null;
   if (e.kind === 'counter' && (out.counter_id == null || out.counter_value == null || Number.isNaN(out.counter_value))) throw new HttpError(400, 'Для счётчика нужны счётчик и значение');
   out.done = !!e.done;
+  out.planned = e.kind === 'activity' && !!e.planned;
   return out;
 }
 
@@ -242,12 +243,12 @@ async function ownsRefs(c, userId, ev) {
   if (ev.counter_id != null) { const r = await c.query('SELECT 1 FROM counters WHERE id=$1 AND user_id=$2', [ev.counter_id, userId]); if (!r.rowCount) throw new HttpError(400, 'Счётчик не найден'); }
 }
 
-const INSERT_SQL = `INSERT INTO events(user_id, kind, day, hours, days, position, activity_id, tag_id, text, mood, kcal, protein, fat, carbs, food_calc, counter_id, counter_value, done, done_at)
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18, CASE WHEN $18 THEN now() ELSE NULL END) RETURNING ${EVENT_COLS}`;
+const INSERT_SQL = `INSERT INTO events(user_id, kind, day, hours, days, position, activity_id, tag_id, text, mood, kcal, protein, fat, carbs, food_calc, counter_id, counter_value, done, done_at, planned)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18, CASE WHEN $18 THEN now() ELSE NULL END, $19) RETURNING ${EVENT_COLS}`;
 const UPDATE_SQL = `UPDATE events SET kind=$3, day=$4, hours=$5, days=$6, position=$7, activity_id=$8, tag_id=$9, text=$10, mood=$11, kcal=$12, protein=$13, fat=$14, carbs=$15, food_calc=$16, counter_id=$17, counter_value=$18,
-  done=$19, done_at = CASE WHEN $19 AND done_at IS NULL THEN now() WHEN NOT $19 THEN NULL ELSE done_at END, updated_at=now() WHERE id=$1 AND user_id=$2 RETURNING ${EVENT_COLS}`;
-function insertParams(userId, v) { return [userId, v.kind, v.day, v.hours, v.days, v.position, v.activity_id, v.tag_id, v.text, v.mood, v.kcal, v.protein, v.fat, v.carbs, v.food_calc, v.counter_id, v.counter_value, v.done]; }
-function updateParams(id, userId, v) { return [id, userId, v.kind, v.day, v.hours, v.days, v.position, v.activity_id, v.tag_id, v.text, v.mood, v.kcal, v.protein, v.fat, v.carbs, v.food_calc, v.counter_id, v.counter_value, v.done]; }
+  done=$19, done_at = CASE WHEN $19 AND done_at IS NULL THEN now() WHEN NOT $19 THEN NULL ELSE done_at END, planned=$20, updated_at=now() WHERE id=$1 AND user_id=$2 RETURNING ${EVENT_COLS}`;
+function insertParams(userId, v) { return [userId, v.kind, v.day, v.hours, v.days, v.position, v.activity_id, v.tag_id, v.text, v.mood, v.kcal, v.protein, v.fat, v.carbs, v.food_calc, v.counter_id, v.counter_value, v.done, v.planned]; }
+function updateParams(id, userId, v) { return [id, userId, v.kind, v.day, v.hours, v.days, v.position, v.activity_id, v.tag_id, v.text, v.mood, v.kcal, v.protein, v.fat, v.carbs, v.food_calc, v.counter_id, v.counter_value, v.done, v.planned]; }
 
 // Пакетное сохранение экрана «добавить»: upsert + delete в одной транзакции
 router.add('POST', '/api/events/batch', async ({ q, user, body }) => {

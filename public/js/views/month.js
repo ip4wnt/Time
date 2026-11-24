@@ -3,7 +3,7 @@ import { I, KIND_ICON, MOOD_ICON } from '../icons.js';
 import {
   state, monthGrid, todayStr, ymOf, loadMonth, loadDates, eventsOfDay, hourMap,
   dominantActivity, dayKcal, dayCounterValue, topCounter, isImportant, isSleepEvent,
-  activity, tag, counter, esc, rangesLabel, MOOD_COLOR, MONTHS_FULL, WEEKDAYS, invalidateEvents, kcalNorm, grad,
+  activity, tag, counter, esc, rangesLabel, MOOD_COLOR, MONTHS_FULL, WEEKDAYS, invalidateEvents, kcalNorm, grad, plannedBg, dayPlanned,
 } from '../state.js';
 import { h, toast } from '../ui.js';
 import { put } from '../api.js';
@@ -53,7 +53,7 @@ export async function renderMonth(ym, query = {}) {
       const { rows, html } = cellRows(overlays(evs), bottom);
       const cell = h(`<button class="cell ${info.inMonth ? '' : 'out'} ${info.date === today ? 'today' : ''}" style="--rows:${rows}" data-day="${info.date}">${html}</button>`);
       const a = dominantActivity(evs);
-      if (a) { cell.style.background = grad(a.color); cell.classList.add('colored'); }
+      if (a) { cell.style.background = dayPlanned(evs) ? plannedBg(a.color, 5) : grad(a.color); cell.classList.add('colored'); }
       if (pickDays && pickDays.has(info.date)) cell.classList.add('selected');
       cell.onclick = () => {
         if (pickDays) {

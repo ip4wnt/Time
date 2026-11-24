@@ -2,7 +2,7 @@
 import { I, KIND_ICON, MOOD_ICON } from '../icons.js';
 import {
   state, dayLabel, dotDate, todayStr, ymOf, loadDay, loadDates, hourMap, foodHeat, dayKcal, topCounter,
-  isImportant, isSleepEvent, activity, tag, counter, MOOD_COLOR, hoursLabel, hoursRange, kcalNorm, grad, invalidateEvents,
+  isImportant, isSleepEvent, activity, tag, counter, MOOD_COLOR, hoursLabel, hoursRange, kcalNorm, grad, plannedBg, invalidateEvents,
 } from '../state.js';
 import { h, toast } from '../ui.js';
 import { put } from '../api.js';
@@ -112,7 +112,7 @@ export async function renderDay(day, query = {}) {
       const cell = h(`<button class="cell ${isToday && hr === nowHour ? 'today' : ''} ${state.selection.has(hr) ? 'selected' : ''}" style="--rows:${rows}" data-hour="${hr}">${html}</button>`);
       const act = slot.all.find((e) => e.kind === 'activity');
       if (act && isSleepEvent(act)) cell.classList.add('sleep');
-      else if (act) { const a = activity(act.activity_id); if (a) { cell.style.background = grad(a.color); cell.classList.add('colored'); } }
+      else if (act) { const a = activity(act.activity_id); if (a) { cell.style.background = act.planned ? plannedBg(a.color, 5) : grad(a.color); cell.classList.add('colored'); } }
       if (slot.extras.length) cell.classList.add('multi');
       // с клавиатуры (Enter/пробел) час переключается обычным нажатием; мышь и палец обрабатывает сетка целиком
       cell.onclick = (e) => {

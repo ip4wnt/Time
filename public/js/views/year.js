@@ -2,7 +2,7 @@
 import { I } from '../icons.js';
 import {
   state, todayStr, loadYear, loadDates, eventsOfDay, hourMap, isSleepEvent, activity, tag, counter,
-  MONTHS_FULL, MONTHS_GEN, daysInMonth, esc, grad, hoursLabel, MOOD_COLOR,
+  MONTHS_FULL, MONTHS_GEN, daysInMonth, esc, grad, plannedBg, hoursLabel, MOOD_COLOR,
 } from '../state.js';
 import { h } from '../ui.js';
 import { calHeader, addBlock, selHeader, sumLine, hourChart } from './common.js';
@@ -71,7 +71,7 @@ export async function renderYear(yearStr, query = {}) {
           const slot = hm[hr];
           const act = slot.all.find((e) => e.kind === 'activity');
           if (act && isSleepEvent(act)) { cell.classList.add('sleep'); key = act.activity_id; }
-          else if (act) { const a = activity(act.activity_id); if (a) { cell.style.background = a.color; key = a.id; } }
+          else if (act) { const a = activity(act.activity_id); if (a) { cell.style.background = act.planned ? plannedBg(a.color, 2) : a.color; key = a.id; } }
         }
         bump(key);
         g.appendChild(cell);
