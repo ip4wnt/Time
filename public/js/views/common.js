@@ -293,7 +293,7 @@ export function hourKey(slot) {
   return a ? a.id : 'empty';
 }
 // полоса по долям и легенда: процент, под ним число часов. Порядок цветов — как в настройках, пустые часы последними.
-export function hourChart(counts, total) {
+export function hourChart(counts, total, small = false) {
   const items = [];
   for (const a of state.activities) {
     const n = counts.get(a.id);
@@ -304,7 +304,7 @@ export function hourChart(counts, total) {
   for (const [k, n] of counts) if (k !== 'empty' && !known.has(k)) rest += n;
   if (rest) items.push({ n: rest, color: '#151115', name: 'без записи' });
   const pct = (n) => { const p = n / total * 100; return p > 0 && p < 1 ? '<1%' : `${Math.round(p)}%`; };
-  return h(`<div class="ychart">
+  return h(`<div class="ychart${small ? ' sm' : ''}">
     <div class="ychart-bar">${items.map((i) => `<i style="flex:${i.n};background:${i.color}" title="${esc(i.name)}"></i>`).join('')}</div>
     <div class="ychart-legend">${items.map((i) => `<div class="yl"><i style="background:${i.color}"></i><span class="yl-p">${pct(i.n)}</span><span class="yl-n">${i.n}</span></div>`).join('')}</div>
   </div>`);

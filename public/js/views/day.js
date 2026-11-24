@@ -250,7 +250,7 @@ export async function renderDay(day, query = {}) {
   function drawChart() {
     const counts = new Map();
     for (let hr = 0; hr < 24; hr++) { const k = hourKey(hm[hr]); counts.set(k, (counts.get(k) || 0) + 1); }
-    colR.appendChild(hourChart(counts, 24));
+    colR.appendChild(hourChart(counts, 24, true));
   }
 
   function drawFood() {

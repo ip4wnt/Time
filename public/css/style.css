@@ -535,3 +535,11 @@ body.bg-year { overflow: hidden; }
 .grid-day { touch-action: none; user-select: none; -webkit-user-select: none; }
 
 .swatches.kb,.tags.kb{outline:2px solid rgba(255,255,255,.7);outline-offset:6px;border-radius:12px}
+
+/* диаграмма в дне и месяце: шрифт как у остального текста, квадратики вдвое меньше */
+.ychart.sm { margin-top: 2.4rem; }
+.ychart.sm .ychart-bar { height: 2.6rem; gap: .2rem; }
+.ychart.sm .ychart-legend { grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 1.2rem .8rem; margin-top: 1.6rem; }
+.ychart.sm .yl { grid-template-columns: 2.4rem auto; column-gap: .8rem; justify-content: start; }
+.ychart.sm .yl > i { width: 2.4rem; height: 2.4rem; }
+.ychart.sm .yl-p, .ychart.sm .yl-n { font-size: 1.6rem; line-height: 1.2; }

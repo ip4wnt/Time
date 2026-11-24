@@ -137,7 +137,7 @@ export async function renderMonth(ym, query = {}) {
       if (!g.inMonth) continue;
       for (const slot of hourMap(perDay.get(g.date))) { const k = hourKey(slot); counts.set(k, (counts.get(k) || 0) + 1); total++; }
     }
-    colR.appendChild(hourChart(counts, total));
+    colR.appendChild(hourChart(counts, total, true));
   }
 
   function drawFoodSummary() {
