@@ -43,7 +43,12 @@ export async function renderYear(yearStr, query = {}) {
   const view = h('<div class="year-view"></div>');
   const canvas = h('<div class="year-canvas"></div>');
   view.appendChild(canvas);
-  page.appendChild(view);
+  // на десктопе: слева год (80%), справа заметки к выбранному часу (20%)
+  const cols = h('<div class="year-cols"></div>');
+  const aside = h('<aside class="year-aside"><p class="ys-hint">нажмите на час, чтобы увидеть записи или добавить новую</p></aside>');
+  cols.append(view, aside);
+  page.appendChild(cols);
+  const isDesk = () => window.matchMedia('(min-width: 1100px)').matches;
 
   for (let m = 1; m <= 12; m++) {
     const ym = `${year}-${String(m).padStart(2, '0')}`;
@@ -64,9 +69,6 @@ export async function renderYear(yearStr, query = {}) {
           const act = slot.all.find((e) => e.kind === 'activity');
           if (act && isSleepEvent(act)) cell.classList.add('sleep');
           else if (act) { const a = activity(act.activity_id); if (a) cell.style.background = a.color; }
-          if (slot.all.some((e) => e.kind !== 'activity')) cell.classList.add('has-extra');
-          else if (slot.all.length > 1) cell.classList.add('has-extra');
-          if (slot.all.some((e) => (e.text || '').trim())) cell.classList.add('has-note');
         }
         g.appendChild(cell);
         // метка дня в начале строки
@@ -79,6 +81,7 @@ export async function renderYear(yearStr, query = {}) {
   // ---------- масштаб ----------
   let zoom = MIN_ZOOM;
   function setZoom(next, cx, cy) {
+    if (isDesk()) return; // на ПК масштаба нет
     next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
     if (Math.abs(next - zoom) < 0.001) return;
     // точка под пальцем/курсором остаётся на месте
@@ -95,7 +98,7 @@ export async function renderYear(yearStr, query = {}) {
   }
   // колесо мыши (трекпад с зажатым ctrl приходит так же)
   view.addEventListener('wheel', (e) => {
-    if (e.shiftKey) return; // shift + колесо — обычная прокрутка
+    if (isDesk() || e.shiftKey) return; // на ПК масштаба нет; shift + колесо — обычная прокрутка
     e.preventDefault();
     const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
     setZoom(zoom * Math.exp(-dy * 0.0025), e.clientX, e.clientY);
@@ -133,7 +136,7 @@ export async function renderYear(yearStr, query = {}) {
   // протягивание мышью для перемещения при увеличении
   let drag = null; let dragged = false;
   view.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || isDesk()) return;
     drag = { x: e.clientX, y: e.clientY, sl: view.scrollLeft, st: view.scrollTop }; dragged = false;
   });
   window.addEventListener('mousemove', onDrag);
@@ -196,13 +199,13 @@ export async function renderYear(yearStr, query = {}) {
         ? `#/add?days=${date}&hours=${hr}&kind=task&back=${back}`
         : `#/add?day=${date}&hours=${hr}&kind=${kind}&back=${back}`;
     }));
-    document.body.appendChild(sheet);
+    (isDesk() ? aside : document.body).appendChild(sheet);
   }
 
   // открываем на нужном месяце
   const focusYm = state.month && state.month.startsWith(String(year)) ? state.month : `${year}-01`;
   const target = canvas.querySelector(`[data-ym="${focusYm}"]`);
-  if (target) view.scrollTop = target.offsetTop - 4;
+  if (target && !isDesk()) view.scrollTop = target.offsetTop - 4;
   return () => {
     closeSheet();
     window.removeEventListener('mousemove', onDrag);

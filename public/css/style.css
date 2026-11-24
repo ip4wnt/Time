@@ -496,9 +496,25 @@ body.bg-year { overflow: hidden; }
 .yc.sleep { background: #262126; }
 .yc.now { outline: .2em solid #81FF96; outline-offset: -.2em; z-index: 1; }
 .yc.selected { outline: .25em solid #fff; outline-offset: -.25em; z-index: 2; }
-.yc.has-extra::after, .yc.has-note::after { content: ''; position: absolute; right: 14%; bottom: 14%; width: 22%; height: 22%; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.4); }
-.yc.has-extra:not(.has-note)::after { background: rgba(255,255,255,.6); }
 .year-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; max-height: 70dvh; overflow-y: auto; background: #0a0a0a; border-top: .1rem solid var(--stroke); padding: 1.6rem 1.82rem calc(2rem + env(safe-area-inset-bottom)); margin: 0 auto; max-width: 60.3rem; }
 .ys-head { display: flex; align-items: center; justify-content: space-between; font-size: 2.2rem; color: var(--text); margin-bottom: 1.2rem; }
 .ys-close { width: 2.2rem; height: 2.2rem; color: var(--text); display: grid; place-items: center; }
 .ys-close svg { width: 100%; height: 100%; }
+
+.year-aside { display: none; }
+@media (min-width: 1100px) {
+  body.bg-year { overflow: auto; }
+  body.bg-year .app { max-width: none; width: 90vw; }
+  .page.year { padding: 0; }
+  .year-cols { display: grid; grid-template-columns: 80fr 20fr; column-gap: 3rem; align-items: start; }
+  .year-view { height: auto; overflow: visible; cursor: default; touch-action: auto; }
+  .year-canvas { width: 100% !important; display: grid; grid-template-columns: repeat(4, 1fr); gap: 2.5rem 3rem; align-items: start; padding-bottom: 6rem; }
+  .ymonth { margin-bottom: 0; }
+  .ymonth-title { font-size: 2rem; margin-bottom: 1rem; }
+  .year-aside { display: block; position: sticky; top: 1.4rem; max-height: calc(100vh - 3rem); overflow-y: auto; }
+  .year-aside .year-sheet { position: static; max-height: none; max-width: none; padding: 0; background: none; border: 0; }
+  .year-aside .ys-close { display: none; }
+  .year-aside .ys-head { font-size: 2rem; }
+  .ys-hint { color: var(--muted); font-size: 1.6rem; margin: 1rem 0; }
+  .year-aside:has(.year-sheet) .ys-hint { display: none; }
+}
