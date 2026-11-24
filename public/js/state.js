@@ -109,7 +109,7 @@ export function activity(id) { return state.activities.find((a) => a.id === Numb
 export function tag(id) { return state.tags.find((t) => t.id === Number(id)) || null; }
 export function counter(id) { return state.counters.find((c) => c.id === Number(id)) || null; }
 export function topCounter() { return state.counters[0] || null; }
-export function activeActivities() { return state.activities.filter((a) => !a.archived); }
+export function activeActivities() { return state.activities.slice(); }
 export function eventColor(e) {
   if (e.kind === 'thought') return MOOD_COLOR[e.mood || 'neutral'];
   if (e.kind === 'food') return '#73D383';

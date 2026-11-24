@@ -70,7 +70,7 @@ router.add('POST', '/api/me/logout-all', async ({ q, user, res }) => {
 // ---------------- bootstrap: справочники ----------------
 router.add('GET', '/api/bootstrap', async ({ q, user }) => {
   const [acts, tags, counters] = await Promise.all([
-    q.query('SELECT id, name, color, position, is_sleep, archived FROM activities WHERE user_id=$1 ORDER BY position, id', [user.id]),
+    q.query('SELECT id, name, color, position, is_sleep FROM activities WHERE user_id=$1 ORDER BY position, id', [user.id]),
     q.query('SELECT id, activity_id, name, position FROM tags WHERE user_id=$1 ORDER BY position, id', [user.id]),
     q.query('SELECT id, name, unit, position FROM counters WHERE user_id=$1 ORDER BY position, id', [user.id]),
   ]);
@@ -97,8 +97,8 @@ router.add('PUT', '/api/activities/:id', async ({ q, user, body, params }) => {
   const a = cur.rows[0];
   const name = body.name !== undefined ? str(body.name, 100).trim() : a.name;
   const color = body.color !== undefined ? (isColor(body.color) ? body.color.toUpperCase() : (() => { throw new HttpError(400, 'Цвет'); })()) : a.color;
-  const r = await q.query('UPDATE activities SET name=$1, color=$2, is_sleep=$3, archived=$4 WHERE id=$5 AND user_id=$6 RETURNING *',
-    [name, color, body.is_sleep !== undefined ? !!body.is_sleep : a.is_sleep, body.archived !== undefined ? !!body.archived : a.archived, id, user.id]);
+  const r = await q.query('UPDATE activities SET name=$1, color=$2, is_sleep=$3 WHERE id=$4 AND user_id=$5 RETURNING *',
+    [name, color, body.is_sleep !== undefined ? !!body.is_sleep : a.is_sleep, id, user.id]);
   return r.rows[0];
 });
 router.add('DELETE', '/api/activities/:id', async ({ q, user, params, query }) => {
@@ -111,7 +111,7 @@ router.add('DELETE', '/api/activities/:id', async ({ q, user, params, query }) =
     if (!query.replace_with) return { ok: false, needs_replacement: true, used };
     const to = int(query.replace_with);
     if (to === id) throw new HttpError(400, 'Нельзя заменить занятие на само себя');
-    const target = await q.query('SELECT id FROM activities WHERE id=$1 AND user_id=$2 AND NOT archived', [to, user.id]);
+    const target = await q.query('SELECT id FROM activities WHERE id=$1 AND user_id=$2', [to, user.id]);
     if (!target.rowCount) throw new HttpError(400, 'Занятие для замены не найдено');
     await tx(q, async (c) => {
       // теги переходят к новому занятию вместе с записями (в конец списка его тегов), тег в записях сохраняется

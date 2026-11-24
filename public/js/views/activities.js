@@ -1,4 +1,4 @@
-// Настройки: занятия — цвет, название, порядок, архив.
+// Настройки: занятия — цвет, название, порядок.
 import { I } from '../icons.js';
 import { post, put, del } from '../api.js';
 import { state, esc, invalidateEvents, savePrefs } from '../state.js';
@@ -26,12 +26,10 @@ export async function renderActivities() {
   page.appendChild(list);
   const addRow = h(`<div class="row"><button class="btn small" data-act="add">${I.plus} новое занятие</button></div>`);
   page.appendChild(addRow);
-  const archBox = h('<div></div>');
-  page.appendChild(archBox);
 
   function draw() {
     list.innerHTML = '';
-    const active = state.activities.filter((a) => !a.archived);
+    const active = state.activities;
     active.forEach((a, i) => {
       const li = h(`<div class="li">
         <input type="color" value="${a.color}" aria-label="цвет">
@@ -58,7 +56,7 @@ export async function renderActivities() {
             if (!(await confirm(`Удалить занятие «${a.name}»?`, 'удалить'))) return;
             let r = await del(`/api/activities/${a.id}`);
             if (r.needs_replacement) {
-              const others = state.activities.filter((x) => !x.archived && x.id !== a.id);
+              const others = state.activities.filter((x) => x.id !== a.id);
               if (!others.length) { toast('У занятия есть записи. Сначала создайте другое занятие, на которое их заменить'); return; }
               const to = await pickReplacement(a, r.used, others);
               if (!to) return;
@@ -74,18 +72,6 @@ export async function renderActivities() {
       });
       list.appendChild(li);
     });
-    const archived = state.activities.filter((a) => a.archived);
-    archBox.innerHTML = '';
-    if (archived.length) {
-      archBox.appendChild(h('<h2 class="h">архив</h2>'));
-      const al = h('<div class="list" style="margin-top:.6rem"></div>');
-      for (const a of archived) {
-        const li = h(`<div class="li dim"><i class="dot" style="background:${a.color}"></i><div class="grow"><div class="ttl">${esc(a.name)}</div></div><button class="btn small ghost" data-act="restore">вернуть</button></div>`);
-        li.querySelector('[data-act=restore]').onclick = async () => { try { const u = await put(`/api/activities/${a.id}`, { archived: false }); Object.assign(a, u); draw(); } catch (e) { toast(e.message); } };
-        al.appendChild(li);
-      }
-      archBox.appendChild(al);
-    }
   }
   addRow.querySelector('[data-act=add]').onclick = async () => {
     const r = await editDialog(null); if (!r) return;
