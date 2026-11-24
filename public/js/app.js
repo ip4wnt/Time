@@ -1,7 +1,7 @@
 // ХРОНУМ — точка входа фронтенда: маршрутизация, меню, авторизация.
 import { hasToken, setToken, post } from './api.js';
 import { I } from './icons.js';
-import { state, loadBootstrap, loadPrefs, loadDates, todayStr, ymOf, esc } from './state.js';
+import { state, loadBootstrap, loadPrefs, loadDates, todayStr, ymOf, esc, addDays, addMonths } from './state.js';
 import { h, toast } from './ui.js';
 import { renderAuth } from './views/auth.js';
 import { renderMonth } from './views/month.js';
@@ -127,6 +127,43 @@ async function start() {
   ready = true;
   route();
 }
+
+// ---------- клавиатура (ПК): A/Ф — назад, D/В — вперёд, W/Ц и S/Ы — смена представления ----------
+// Проверяем физическую клавишу (e.code), поэтому раскладка не важна.
+function onKey(e) {
+  if (!ready || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  const t = e.target;
+  if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  if (state.menuOpen || document.querySelector('.dlg-back, .selbar')) return;
+  if (document.body.classList.contains('bg-hours')) return; // идёт выбор часов
+  const { parts } = parseHash();
+  const view = parts[0] || 'month';
+  if (!['day', 'month', 'year'].includes(view)) return;
+  const today = todayStr();
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(parts[1] || '') ? parts[1] : (state.day || today);
+  const ym = /^\d{4}-\d{2}$/.test(parts[1] || '') && view === 'month' ? parts[1] : (state.month || ymOf(today));
+  const year = /^\d{4}$/.test(parts[1] || '') && view === 'year' ? Number(parts[1]) : Number((state.month || ymOf(today)).slice(0, 4));
+  let go = null;
+  if (e.code === 'KeyA' || e.code === 'KeyD') {
+    const k = e.code === 'KeyA' ? -1 : 1;
+    if (view === 'day') go = `#/day/${addDays(day, k)}`;
+    else if (view === 'month') go = `#/month/${addMonths(ym, k)}`;
+    else go = `#/year/${year + k}`;
+  } else if (e.code === 'KeyW' || e.code === 'KeyS') {
+    // W — к более крупному представлению (день → месяц → год), S — к более мелкому
+    const order = ['day', 'month', 'year'];
+    const to = order[order.indexOf(view) + (e.code === 'KeyW' ? 1 : -1)];
+    if (!to) return;
+    if (to === 'month') {
+      const y = view === 'year' ? year : null;
+      const m = view === 'day' ? ymOf(day) : (state.month && state.month.startsWith(String(y)) ? state.month : (ymOf(today).startsWith(String(y)) ? ymOf(today) : `${y}-01`));
+      go = `#/month/${m}`;
+    } else if (to === 'year') go = `#/year/${ym.slice(0, 4)}`;
+    else go = `#/day/${state.day && ymOf(state.day) === ym ? state.day : (ymOf(today) === ym ? today : `${ym}-01`)}`;
+  }
+  if (go) { e.preventDefault(); location.hash = go; }
+}
+window.addEventListener('keydown', onKey);
 
 window.addEventListener('hashchange', route);
 window.addEventListener('chronum:unauth', () => { if (ready) { ready = false; start(); } });
