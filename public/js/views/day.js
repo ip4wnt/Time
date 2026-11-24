@@ -2,7 +2,7 @@
 import { I, KIND_ICON, MOOD_ICON } from '../icons.js';
 import {
   state, dayLabel, dotDate, todayStr, ymOf, loadDay, loadDates, hourMap, foodHeat, dayKcal, topCounter,
-  isImportant, isSleepEvent, activity, tag, counter, MOOD_COLOR, hoursLabel, hoursRange, kcalNorm, grad, plannedBg, invalidateEvents,
+  isImportant, isSleepEvent, activity, tag, counter, MOOD_COLOR, hoursLabel, hoursRange, kcalNorm, grad, plannedBg, activityLabel, invalidateEvents,
 } from '../state.js';
 import { h, toast } from '../ui.js';
 import { put } from '../api.js';
@@ -256,7 +256,7 @@ export async function renderDay(day, query = {}) {
   }
 
   function labelFor(e) {
-    if (e.kind === 'activity') { const a = activity(e.activity_id); const tg = e.tag_id ? tag(e.tag_id) : null; return (e.text || '').trim() || [a?.name, tg?.name].filter(Boolean).join(' · ') || 'занятие'; }
+    if (e.kind === 'activity') { return activityLabel(e); }
     if (e.kind === 'counter') { const c = counter(e.counter_id); return `${c ? c.name : 'счётчик'}: ${e.counter_value}${c && c.unit ? ` ${c.unit}` : ''}`; }
     if (e.kind === 'food') return (e.text || '').trim() + (e.kcal != null ? ` — ${Math.round(e.kcal)} ккал` : '');
     return (e.text || '').trim();

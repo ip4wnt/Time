@@ -561,3 +561,9 @@ body.bg-year { overflow: hidden; }
 .yavg-v small { color: var(--muted); font-size: 1.3rem; }
 .yavg-s { grid-column: 2 / 4; color: var(--muted); font-size: 1.3rem; }
 .yavg { padding: 0 1.6rem; }
+
+/* мобильная версия: поле комментария — в одну строку, по нажатию разворачивается до 7 строк */
+@media (max-width: 1099px) {
+  .ta.big { min-height: 0; height: 7.4rem; resize: none; }
+  .ta.big:focus { height: 29.2rem; }
+}

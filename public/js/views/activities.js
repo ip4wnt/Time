@@ -20,6 +20,10 @@ export async function renderActivities() {
   });
   page.appendChild(homeSeg);
 
+  const hn = h(`<label class="inline" style="margin-top:2rem"><input type="checkbox" class="check" ${state.hideActName ? 'checked' : ''}> не показывать название занятия в списках (только цвет и комментарий)</label>`);
+  hn.querySelector('input').onchange = (e) => { state.hideActName = e.target.checked; savePrefs(); };
+  page.appendChild(hn);
+
   page.appendChild(h('<h2 class="h">занятия</h2>'));
   page.appendChild(h('<p class="p">цвет меняется прямо в кружке. При удалении занятия с записями приложение спросит, на какое занятие их заменить</p>'));
   const list = h('<div class="list"></div>');

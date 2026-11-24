@@ -20,6 +20,7 @@ export const state = {
   sort: 'weight',     // weight | chrono
   hiddenKinds: new Set(),
   hiddenActivities: new Set(), // id занятий, скрытых в сводке
+  hideActName: false, // не показывать название занятия: только цвет и комментарий
   month: null,        // 'YYYY-MM'
   day: null,          // 'YYYY-MM-DD' — последний выбранный/просмотренный день
   selection: new Set(),
@@ -239,11 +240,12 @@ export function loadPrefs() {
     if (p.home === 'day' || p.home === 'month') state.home = p.home;
     if (Array.isArray(p.filters)) state.filters = new Set(p.filters);
     if (Array.isArray(p.hiddenKinds)) state.hiddenKinds = new Set(p.hiddenKinds);
+    state.hideActName = !!p.hideActName;
     if (Array.isArray(p.hiddenActivities)) state.hiddenActivities = new Set(p.hiddenActivities.map(Number));
   } catch { /* ignore */ }
 }
 export function savePrefs() {
-  try { localStorage.setItem('chronum_prefs', JSON.stringify({ sort: state.sort, home: state.home, filters: [...state.filters], hiddenKinds: [...state.hiddenKinds], hiddenActivities: [...state.hiddenActivities] })); } catch { /* ignore */ }
+  try { localStorage.setItem('chronum_prefs', JSON.stringify({ sort: state.sort, home: state.home, filters: [...state.filters], hiddenKinds: [...state.hiddenKinds], hiddenActivities: [...state.hiddenActivities], hideActName: state.hideActName })); } catch { /* ignore */ }
 }
 
 // ---------- утилиты ----------
@@ -251,3 +253,12 @@ export function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&
 export function fmtSize(n) { if (n < 1024) return `${n} Б`; if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} КБ`; return `${(n / 1024 / 1024).toFixed(1)} МБ`; }
 export function fmtTime(iso) { const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
 export function firstLine(text, max = 60) { const s = String(text || '').split('\n').find((l) => l.trim()) || ''; return s.length > max ? s.slice(0, max - 1) + '…' : s; }
+
+// подпись занятия в списках: комментарий, иначе название и тег (название можно скрыть в настройках)
+export function activityLabel(e, fallback = 'занятие') {
+  const t = (e.text || '').trim();
+  if (t) return t;
+  const a = e.activity_id ? activity(e.activity_id) : null;
+  const tg = e.tag_id ? tag(e.tag_id) : null;
+  return [state.hideActName ? null : a?.name, tg?.name].filter(Boolean).join(' · ') || (state.hideActName ? '' : fallback);
+}

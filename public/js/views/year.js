@@ -2,7 +2,7 @@
 import { I } from '../icons.js';
 import {
   state, todayStr, loadYear, loadDates, eventsOfDay, hourMap, isSleepEvent, activity, tag, counter,
-  MONTHS_FULL, MONTHS_GEN, daysInMonth, esc, grad, plannedBg, hoursLabel, MOOD_COLOR,
+  MONTHS_FULL, MONTHS_GEN, daysInMonth, esc, grad, plannedBg, activityLabel, hoursLabel, MOOD_COLOR,
 } from '../state.js';
 import { h } from '../ui.js';
 import { calHeader, addBlock, selHeader, sumLine, hourChart } from './common.js';
@@ -173,7 +173,7 @@ export async function renderYear(yearStr, query = {}) {
 
   function labelFor(e) {
     const t = (e.text || '').trim();
-    if (e.kind === 'activity') { const a = activity(e.activity_id); const tg = e.tag_id ? tag(e.tag_id) : null; return t || [a?.name, tg?.name].filter(Boolean).join(' · ') || 'занятие'; }
+    if (e.kind === 'activity') return activityLabel(e);
     if (e.kind === 'counter') { const c = counter(e.counter_id); return `${c ? c.name : 'счётчик'}: ${e.counter_value}${c && c.unit ? ` ${c.unit}` : ''}`; }
     if (e.kind === 'food') return t + (e.kcal != null ? `${t ? ' — ' : ''}${Math.round(e.kcal)} ккал` : '');
     return t;

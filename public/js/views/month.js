@@ -3,7 +3,7 @@ import { I, KIND_ICON, MOOD_ICON } from '../icons.js';
 import {
   state, monthGrid, todayStr, ymOf, loadMonth, loadDates, eventsOfDay, hourMap,
   dominantActivity, dayKcal, dayCounterValue, topCounter, isImportant, isSleepEvent,
-  activity, tag, counter, esc, rangesLabel, MOOD_COLOR, MONTHS_FULL, WEEKDAYS, invalidateEvents, kcalNorm, grad, plannedBg, dayPlanned,
+  activity, tag, counter, esc, rangesLabel, MOOD_COLOR, MONTHS_FULL, WEEKDAYS, invalidateEvents, kcalNorm, grad, plannedBg, activityLabel, dayPlanned,
 } from '../state.js';
 import { h, toast } from '../ui.js';
 import { put } from '../api.js';
@@ -123,8 +123,8 @@ export async function renderMonth(ym, query = {}) {
     const list = [...groups.values()].sort((a, b) => a.days[0] - b.days[0]);
     for (const gr of list) {
       const a = activity(gr.e.activity_id); const tg = gr.e.tag_id ? tag(gr.e.tag_id) : null;
-      const text = (gr.e.text || '').trim() || [a && a.name, tg && tg.name].filter(Boolean).join(' · ');
-      box.appendChild(sumLine(rangesLabel(gr.days), text, { files: gr.files, onClick: () => openEvent(gr.e) }));
+      const text = activityLabel(gr.e);
+      box.appendChild(sumLine(rangesLabel(gr.days), text, { files: gr.files, prefix: state.hideActName && a ? `<i class="mood-dot" style="background:${a.color}"></i>` : '', onClick: () => openEvent(gr.e) }));
     }
     if (!list.length) box.appendChild(h(`<p class="p">${state.hiddenActivities.size ? 'по выбранным занятиям в этом месяце ничего нет' : 'в этом месяце пока нет занятий от трёх часов подряд'}</p>`));
     colR.appendChild(box);
