@@ -66,7 +66,8 @@ export async function renderActivities() {
               toast(`Записи (${r.replaced}) переведены на выбранное занятие`);
             }
             state.activities = state.activities.filter((x) => x.id !== a.id);
-            state.tags = state.tags.filter((t) => t.activity_id !== a.id);
+            if (r.moved_to) { for (const t of state.tags) { if (t.activity_id === a.id) t.activity_id = r.moved_to; } }
+            else state.tags = state.tags.filter((t) => t.activity_id !== a.id);
             invalidateEvents(); draw();
           }
         } catch (err) { toast(err.message); }
@@ -105,7 +106,7 @@ async function editDialog(a) {
 
 // выбор занятия, на которое переносятся записи удаляемого занятия
 function pickReplacement(a, used, others) {
-  const body = h(`<div class="repl"><p class="p">У занятия «${esc(a.name)}» есть записи (${used}). Выберите занятие, на которое их заменить. Теги этих записей будут сброшены.</p>
+  const body = h(`<div class="repl"><p class="p">У занятия «${esc(a.name)}» есть записи (${used}). Выберите занятие, на которое их заменить. Теги переедут вместе с записями.</p>
     ${others.map((o, i) => `<label><input type="radio" name="repl" value="${o.id}" ${i === 0 ? 'checked' : ''}> <i class="mood-dot" style="background:${o.color}"></i> ${esc(o.name)}</label>`).join('')}</div>`);
   return dialog({
     title: 'Заменить занятие',

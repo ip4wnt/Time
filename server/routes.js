@@ -114,11 +114,13 @@ router.add('DELETE', '/api/activities/:id', async ({ q, user, params, query }) =
     const target = await q.query('SELECT id FROM activities WHERE id=$1 AND user_id=$2 AND NOT archived', [to, user.id]);
     if (!target.rowCount) throw new HttpError(400, 'Занятие для замены не найдено');
     await tx(q, async (c) => {
-      // теги удаляемого занятия исчезнут вместе с ним, поэтому в записях тег сбрасываем
-      await c.query('UPDATE events SET activity_id=$3, tag_id=NULL, updated_at=now() WHERE activity_id=$1 AND user_id=$2', [id, user.id, to]);
+      // теги переходят к новому занятию вместе с записями (в конец списка его тегов), тег в записях сохраняется
+      const base = (await c.query('SELECT coalesce(max(position),-1)+1 AS p FROM tags WHERE activity_id=$1 AND user_id=$2', [to, user.id])).rows[0].p;
+      await c.query('UPDATE tags SET activity_id=$3, position=$4 + position WHERE activity_id=$1 AND user_id=$2', [id, user.id, to, base]);
+      await c.query('UPDATE events SET activity_id=$3, updated_at=now() WHERE activity_id=$1 AND user_id=$2', [id, user.id, to]);
       await c.query('DELETE FROM activities WHERE id=$1 AND user_id=$2', [id, user.id]);
     });
-    return { ok: true, replaced: used };
+    return { ok: true, replaced: used, moved_to: to };
   }
   await q.query('DELETE FROM activities WHERE id=$1 AND user_id=$2', [id, user.id]);
   return { ok: true };
