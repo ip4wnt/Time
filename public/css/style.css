@@ -521,3 +521,12 @@ body.bg-year { overflow: hidden; }
 .repl { display: flex; flex-direction: column; gap: 1rem; }
 .repl label { display: flex; align-items: center; gap: 1rem; font-size: 1.7rem; cursor: pointer; }
 .repl .mood-dot { flex: none; margin: 0; }
+
+.ychart { margin-top: 2.4em; }
+.ychart-bar { display: flex; height: 3em; gap: .15em; background: #000; }
+.ychart-bar i { display: block; min-width: .15em; }
+.ychart-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5em, 1fr)); gap: 1.6em .8em; margin-top: 2em; }
+.yl { display: grid; grid-template-columns: 2.8em auto; grid-template-rows: auto auto; column-gap: .8em; align-items: center; }
+.yl > i { grid-row: 1 / 3; width: 2.8em; height: 2.8em; display: block; }
+.yl-p { font-size: 2.4em; line-height: 1.1; color: var(--text); }
+.yl-n { font-size: 2.4em; line-height: 1.1; color: var(--muted); }

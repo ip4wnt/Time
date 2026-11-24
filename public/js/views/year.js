@@ -55,6 +55,8 @@ export async function renderYear(yearStr, query = {}) {
     const block = h(`<section class="ymonth" data-ym="${ym}"><div class="ymonth-title">${MONTHS_FULL[m - 1][0].toUpperCase()}${MONTHS_FULL[m - 1].slice(1)}</div></section>`);
     const g = h('<div class="ymonth-grid"></div>');
     const n = daysInMonth(ym);
+    const counts = new Map(); // id занятия или 'empty' → число часов
+    const bump = (k) => counts.set(k, (counts.get(k) || 0) + 1);
     for (let d = 1; d <= n; d++) {
       const date = `${ym}-${String(d).padStart(2, '0')}`;
       const evs = (byDay.get(date) || []);
@@ -64,17 +66,20 @@ export async function renderYear(yearStr, query = {}) {
         cell.className = 'yc';
         cell.dataset.date = date; cell.dataset.hour = hr;
         if (date === today && hr === new Date().getHours()) cell.classList.add('now');
+        let key = 'empty';
         if (hm) {
           const slot = hm[hr];
           const act = slot.all.find((e) => e.kind === 'activity');
-          if (act && isSleepEvent(act)) cell.classList.add('sleep');
-          else if (act) { const a = activity(act.activity_id); if (a) cell.style.background = a.color; }
+          if (act && isSleepEvent(act)) { cell.classList.add('sleep'); key = act.activity_id; }
+          else if (act) { const a = activity(act.activity_id); if (a) { cell.style.background = a.color; key = a.id; } }
         }
+        bump(key);
         g.appendChild(cell);
         // метка дня в начале строки
       }
     }
     block.appendChild(g);
+    block.appendChild(monthChart(counts, n * 24));
     canvas.appendChild(block);
   }
 
@@ -234,4 +239,25 @@ function yearPicker(year, onPick) {
   }
   draw();
   return pop;
+}
+
+// Диаграмма месяца: полоса по долям и легенда (процент, под ним число часов).
+// Порядок цветов — как в настройках; клетки без занятия идут последними.
+function monthChart(counts, total) {
+  const items = [];
+  for (const a of state.activities) {
+    const n = counts.get(a.id);
+    if (n) items.push({ n, color: a.is_sleep ? '#262126' : a.color, name: a.name });
+  }
+  // занятия, которых уже нет в настройках, и пустые часы
+  const known = new Set(state.activities.map((a) => a.id));
+  let rest = counts.get('empty') || 0;
+  for (const [k, n] of counts) if (k !== 'empty' && !known.has(k)) rest += n;
+  if (rest) items.push({ n: rest, color: '#151115', name: 'без записи' });
+  const pct = (n) => { const p = n / total * 100; return p > 0 && p < 1 ? '<1%' : `${Math.round(p)}%`; };
+  const el = h(`<div class="ychart">
+    <div class="ychart-bar">${items.map((i) => `<i style="flex:${i.n};background:${i.color}" title="${esc(i.name)}"></i>`).join('')}</div>
+    <div class="ychart-legend">${items.map((i) => `<div class="yl"><i style="background:${i.color}"></i><span class="yl-p">${pct(i.n)}</span><span class="yl-n">${i.n}</span></div>`).join('')}</div>
+  </div>`);
+  return el;
 }
