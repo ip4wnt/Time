@@ -508,7 +508,7 @@ body.bg-year { overflow: hidden; }
   .page.year { padding: 0; }
   .year-cols { display: grid; grid-template-columns: 80fr 20fr; column-gap: 3rem; align-items: start; }
   .year-view { height: auto; overflow: visible; cursor: default; touch-action: auto; }
-  .year-canvas { width: 100% !important; display: grid; grid-template-columns: repeat(4, 1fr); gap: 2.5rem 3rem; align-items: start; padding-bottom: 6rem; }
+  .year-canvas { width: 100% !important; display: grid; grid-template-columns: repeat(2, 1fr); gap: 3rem 4rem; align-items: start; padding-bottom: 6rem; }
   .ymonth { margin-bottom: 0; }
   .ymonth-title { font-size: 2rem; margin-bottom: 1rem; }
   .year-aside { display: block; position: sticky; top: 1.4rem; max-height: calc(100vh - 3rem); overflow-y: auto; }
