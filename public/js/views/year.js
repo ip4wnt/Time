@@ -50,6 +50,8 @@ export async function renderYear(yearStr, query = {}) {
   page.appendChild(cols);
   const isDesk = () => window.matchMedia('(min-width: 1100px)').matches;
 
+  const stat = new Map(); // id занятия → { hours, days }
+  let filledDays = 0;
   for (let m = 1; m <= 12; m++) {
     const ym = `${year}-${String(m).padStart(2, '0')}`;
     const block = h(`<section class="ymonth" data-ym="${ym}"><div class="ymonth-title">${MONTHS_FULL[m - 1][0].toUpperCase()}${MONTHS_FULL[m - 1].slice(1)}</div></section>`);
@@ -59,6 +61,7 @@ export async function renderYear(yearStr, query = {}) {
     const bump = (k) => counts.set(k, (counts.get(k) || 0) + 1);
     for (let d = 1; d <= n; d++) {
       const date = `${ym}-${String(d).padStart(2, '0')}`;
+      const dayCnt = new Map();
       const evs = (byDay.get(date) || []);
       const hm = evs.length ? hourMap(evs) : null;
       for (let hr = 0; hr < 24; hr++) {
@@ -74,14 +77,18 @@ export async function renderYear(yearStr, query = {}) {
           else if (act) { const a = activity(act.activity_id); if (a) { cell.style.background = act.planned ? plannedBg(a.color, 2) : a.color; key = a.id; } }
         }
         bump(key);
+        if (key !== 'empty') dayCnt.set(key, (dayCnt.get(key) || 0) + 1);
         g.appendChild(cell);
         // метка дня в начале строки
       }
+      if (dayCnt.size) filledDays++;
+      for (const [k, n2] of dayCnt) { const st = stat.get(k) || { hours: 0, days: 0 }; st.hours += n2; st.days++; stat.set(k, st); }
     }
     block.appendChild(g);
     block.appendChild(hourChart(counts, n * 24));
     canvas.appendChild(block);
   }
+  canvas.appendChild(yearAverages(stat, filledDays));
 
   // ---------- масштаб ----------
   let zoom = MIN_ZOOM;
@@ -239,4 +246,18 @@ function yearPicker(year, onPick) {
   }
   draw();
   return pop;
+}
+
+// Среднее за день по году. Основная цифра — на день, в котором вообще есть записи (пустые и будущие дни не размывают среднее).
+// Для редких занятий рядом показаны число дней и среднее в те дни, когда занятие было.
+function yearAverages(stat, filledDays) {
+  const f = (x) => (x > 0 && x < 0.1 ? '<0,1' : x.toFixed(1).replace('.', ','));
+  const rows = state.activities.filter((a) => stat.get(a.id)).map((a) => {
+    const st = stat.get(a.id);
+    const color = a.is_sleep ? '#262126' : a.color;
+    return `<div class="yavg-row"><i style="background:${color}"></i><span class="yavg-name">${esc(a.name)}</span><span class="yavg-v">${f(st.hours / filledDays)}<small> ч в день</small></span><span class="yavg-s">${st.days} дн. · ${f(st.hours / st.days)} ч в такие дни</span></div>`;
+  });
+  const el = h(`<section class="yavg"><div class="ymonth-title">В среднем за день</div>
+    <p class="yavg-note">по ${filledDays} дн. с записями</p>${rows.join('') || '<p class="yavg-note">пока нет записей</p>'}</section>`);
+  return el;
 }
