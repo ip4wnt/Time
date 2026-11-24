@@ -101,16 +101,26 @@ router.add('PUT', '/api/activities/:id', async ({ q, user, body, params }) => {
     [name, color, body.is_sleep !== undefined ? !!body.is_sleep : a.is_sleep, body.archived !== undefined ? !!body.archived : a.archived, id, user.id]);
   return r.rows[0];
 });
-router.add('DELETE', '/api/activities/:id', async ({ q, user, params }) => {
+router.add('DELETE', '/api/activities/:id', async ({ q, user, params, query }) => {
   const id = int(params.id);
-  const used = await q.query('SELECT count(*)::int n FROM events WHERE activity_id=$1 AND user_id=$2', [id, user.id]);
-  if (used.rows[0].n > 0) {
-    // занятие с записями не удаляем, а архивируем
-    await q.query('UPDATE activities SET archived=true WHERE id=$1 AND user_id=$2', [id, user.id]);
-    return { ok: true, archived: true, used: used.rows[0].n };
+  const cur = await q.query('SELECT id FROM activities WHERE id=$1 AND user_id=$2', [id, user.id]);
+  if (!cur.rowCount) throw new HttpError(404, 'Занятие не найдено');
+  const used = (await q.query('SELECT count(*)::int n FROM events WHERE activity_id=$1 AND user_id=$2', [id, user.id])).rows[0].n;
+  if (used > 0) {
+    // у занятия есть записи: без выбранной замены ничего не меняем, а просим клиента спросить пользователя
+    if (!query.replace_with) return { ok: false, needs_replacement: true, used };
+    const to = int(query.replace_with);
+    if (to === id) throw new HttpError(400, 'Нельзя заменить занятие на само себя');
+    const target = await q.query('SELECT id FROM activities WHERE id=$1 AND user_id=$2 AND NOT archived', [to, user.id]);
+    if (!target.rowCount) throw new HttpError(400, 'Занятие для замены не найдено');
+    await tx(q, async (c) => {
+      // теги удаляемого занятия исчезнут вместе с ним, поэтому в записях тег сбрасываем
+      await c.query('UPDATE events SET activity_id=$3, tag_id=NULL, updated_at=now() WHERE activity_id=$1 AND user_id=$2', [id, user.id, to]);
+      await c.query('DELETE FROM activities WHERE id=$1 AND user_id=$2', [id, user.id]);
+    });
+    return { ok: true, replaced: used };
   }
-  const del = await q.query('DELETE FROM activities WHERE id=$1 AND user_id=$2 RETURNING id', [id, user.id]);
-  if (!del.rowCount) throw new HttpError(404, 'Занятие не найдено');
+  await q.query('DELETE FROM activities WHERE id=$1 AND user_id=$2', [id, user.id]);
   return { ok: true };
 });
 

@@ -518,3 +518,6 @@ body.bg-year { overflow: hidden; }
   .ys-hint { color: var(--muted); font-size: 1.6rem; margin: 1rem 0; }
   .year-aside:has(.year-sheet) .ys-hint { display: none; }
 }
+.repl { display: flex; flex-direction: column; gap: 1rem; }
+.repl label { display: flex; align-items: center; gap: 1rem; font-size: 1.7rem; cursor: pointer; }
+.repl .mood-dot { flex: none; margin: 0; }

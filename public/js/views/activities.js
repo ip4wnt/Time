@@ -21,7 +21,7 @@ export async function renderActivities() {
   page.appendChild(homeSeg);
 
   page.appendChild(h('<h2 class="h">занятия</h2>'));
-  page.appendChild(h('<p class="p">цвет меняется прямо в кружке. Занятие с записями при удалении уходит в архив — его записи и цвет сохраняются</p>'));
+  page.appendChild(h('<p class="p">цвет меняется прямо в кружке. При удалении занятия с записями приложение спросит, на какое занятие их заменить</p>'));
   const list = h('<div class="list"></div>');
   page.appendChild(list);
   const addRow = h(`<div class="row"><button class="btn small" data-act="add">${I.plus} новое занятие</button></div>`);
@@ -56,8 +56,17 @@ export async function renderActivities() {
             const u = await put(`/api/activities/${a.id}`, r); Object.assign(a, u); draw();
           } else if (b.dataset.act === 'del') {
             if (!(await confirm(`Удалить занятие «${a.name}»?`, 'удалить'))) return;
-            const r = await del(`/api/activities/${a.id}`);
-            if (r.archived) { a.archived = true; toast(`У занятия ${r.used} записей — оно перенесено в архив`); } else state.activities = state.activities.filter((x) => x.id !== a.id);
+            let r = await del(`/api/activities/${a.id}`);
+            if (r.needs_replacement) {
+              const others = state.activities.filter((x) => !x.archived && x.id !== a.id);
+              if (!others.length) { toast('У занятия есть записи. Сначала создайте другое занятие, на которое их заменить'); return; }
+              const to = await pickReplacement(a, r.used, others);
+              if (!to) return;
+              r = await del(`/api/activities/${a.id}?replace_with=${to}`);
+              toast(`Записи (${r.replaced}) переведены на выбранное занятие`);
+            }
+            state.activities = state.activities.filter((x) => x.id !== a.id);
+            state.tags = state.tags.filter((t) => t.activity_id !== a.id);
             invalidateEvents(); draw();
           }
         } catch (err) { toast(err.message); }
@@ -92,4 +101,15 @@ async function editDialog(a) {
   const r = await dialog({ title: a ? 'изменить занятие' : 'новое занятие', body, actions: [{ label: 'готово', value: (el) => ({ name: el.querySelector('[data-f=name]').value.trim(), color: el.querySelector('[data-f=color]').value.toUpperCase(), is_sleep: el.querySelector('[data-f=sleep]').checked }) }] });
   if (!r || !r.name) return null;
   return r;
+}
+
+// выбор занятия, на которое переносятся записи удаляемого занятия
+function pickReplacement(a, used, others) {
+  const body = h(`<div class="repl"><p class="p">У занятия «${esc(a.name)}» есть записи (${used}). Выберите занятие, на которое их заменить. Теги этих записей будут сброшены.</p>
+    ${others.map((o, i) => `<label><input type="radio" name="repl" value="${o.id}" ${i === 0 ? 'checked' : ''}> <i class="mood-dot" style="background:${o.color}"></i> ${esc(o.name)}</label>`).join('')}</div>`);
+  return dialog({
+    title: 'Заменить занятие',
+    body,
+    actions: [{ label: 'заменить и удалить', cls: 'danger', value: (el) => Number(el.querySelector('input[name=repl]:checked').value) }],
+  });
 }
