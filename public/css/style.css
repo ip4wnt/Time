@@ -548,3 +548,6 @@ body.bg-year { overflow: hidden; }
 .addblock .icons button.on { background: #fff; color: #000; padding: .7rem; }
 .add-host { margin-top: 2.4rem; }
 .add-embed { padding: 0; }
+
+.plan-row.kb { outline: 2px solid rgba(255,255,255,.7); outline-offset: 6px; border-radius: 12px; }
+.cal-r > .addblock:first-child { margin-top: 0; }

@@ -197,7 +197,7 @@ export async function renderAdd(q, opts = {}) {
     body.appendChild(swatches(en, redraw));
     body.appendChild(textarea(en, PLACEHOLDER.activity, 'big'));
     if (en.kind === 'activity') {
-      const pl = h(`<label class="inline" style="margin-top:1.8rem"><input type="checkbox" class="check" ${en.planned ? 'checked' : ''}> план</label>`);
+      const pl = h(`<label class="inline plan-row" style="margin-top:1.8rem"><input type="checkbox" class="check" ${en.planned ? 'checked' : ''}> план</label>`);
       pl.querySelector('input').onchange = (e) => { en.planned = e.target.checked; };
       body.appendChild(pl);
     }
@@ -435,16 +435,34 @@ export async function renderAdd(q, opts = {}) {
   draw();
   if (!embed && focusNew) { const last = list.lastElementChild; last?.scrollIntoView({ block: 'start' }); last?.querySelector('textarea, input')?.focus(); }
 
-  // ---- клавиатура (десктоп): ←/→ цвет, пробел — тег, пробел — текст, Enter сохранить, Esc отмена, Delete удалить
+  // ---- клавиатура (десктоп). Блоки по порядку: цвет → текст → «план» → тег. Пробел (и Shift+пробел) — к следующему блоку,
+  // ←/→ меняют цвет, тег или «план», Enter сохраняет, Esc отменяет, Delete удаляет запись.
   let kbMode = 'color';
+  let engaged = !embed; // во встроенной форме клавиатура включается по Enter в представлении дня
   const primary = () => entries.findIndex((e) => e.kind === 'activity' || e.kind === 'task');
   function kbEl() { const i = primary(); return i < 0 ? null : list.children[i]; }
+  function kbBlocks(el) {
+    const b = ['color'];
+    if (el.querySelector('textarea')) b.push('text');
+    if (el.querySelector('.plan-row')) b.push('plan');
+    if (el.querySelector('.tags .chip:not(.edit)')) b.push('tag');
+    return b;
+  }
   function kbRefresh() {
     document.querySelectorAll('.kb').forEach((n) => n.classList.remove('kb'));
-    if (embed) return;
+    if (!engaged) return;
     const el = kbEl(); if (!el) return;
-    if (kbMode === 'color') el.querySelector('.swatches')?.classList.add('kb');
-    else if (kbMode === 'tag') el.querySelector('.tags')?.classList.add('kb');
+    const sel = { color: '.swatches', tag: '.tags', plan: '.plan-row' }[kbMode];
+    if (sel) el.querySelector(sel)?.classList.add('kb');
+  }
+  function kbNext() {
+    const el = kbEl(); if (!el) return;
+    const b = kbBlocks(el);
+    kbMode = b[(Math.max(0, b.indexOf(kbMode)) + 1) % b.length];
+    const ta = el.querySelector('textarea');
+    if (kbMode === 'text') { ta?.focus(); const n = ta?.value.length || 0; ta?.setSelectionRange(n, n); }
+    else ta?.blur();
+    kbRefresh();
   }
   function onKey(e) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -454,11 +472,9 @@ export async function renderAdd(q, opts = {}) {
     const t = e.target;
     const inField = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
     if (inField && t !== ta) return;
-    if (embed && t !== ta) return;
+    if (!engaged && t !== ta) return;
     if (t === ta) {
-      if (e.key === ' ' && e.shiftKey) { // Shift+пробел из текста — к следующему блоку (колесо: цвет → тег → текст)
-        e.preventDefault(); ta.blur(); kbMode = 'color'; kbRefresh(); return;
-      }
+      if (e.key === ' ' && e.shiftKey) { e.preventDefault(); kbNext(); return; }
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
       else if (e.key === 'Escape') { e.preventDefault(); leave(false); }
       return;
@@ -472,13 +488,7 @@ export async function renderAdd(q, opts = {}) {
       confirm('Удалить эту запись?', 'удалить').then((ok) => { if (!ok) return; removed.push(en.id); entries.splice(primary(), 1); save(); });
       return;
     }
-    if (e.key === ' ') {
-      e.preventDefault();
-      const hasTags = !!el.querySelector('.tags .chip:not(.edit)');
-      if (kbMode === 'color' && hasTags) kbMode = 'tag';
-      else { kbMode = 'text'; kbRefresh(); ta?.focus(); const n = ta?.value.length || 0; ta?.setSelectionRange(n, n); return; }
-      kbRefresh(); return;
-    }
+    if (e.key === ' ') { e.preventDefault(); kbNext(); return; }
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
     const d = e.key === 'ArrowRight' ? 1 : -1;
@@ -491,6 +501,8 @@ export async function renderAdd(q, opts = {}) {
       const cur = chips.findIndex((b) => b.classList.contains('on')); // -1 = без тега
       let nx = cur + d; if (nx < -1) nx = chips.length - 1; if (nx >= chips.length) nx = -1;
       if (nx === -1) chips[cur]?.click(); else chips[nx].click();
+    } else if (kbMode === 'plan') {
+      el.querySelector('.plan-row input')?.click();
     }
     kbRefresh();
   }
@@ -499,6 +511,8 @@ export async function renderAdd(q, opts = {}) {
   const cleanup = () => { window.removeEventListener('keydown', onKey); if (!embed) document.body.classList.remove(`bg-add-${bgKind}`); };
   cleanup.getDraft = () => { const en = entries.find((e) => !e.id && e.kind === kind); return en ? { text: en.text, activity_id: en.activity_id, tag_id: en.tag_id, planned: en.planned, done: en.done } : null; };
   cleanup.setDraft = (d) => { const en = entries.find((e) => !e.id && e.kind === kind); if (en && d) { Object.assign(en, d); draw(); } };
+  cleanup.engage = () => { engaged = true; kbMode = 'color'; document.activeElement?.blur?.(); kbRefresh(); };
+  cleanup.isEngaged = () => embed && engaged;
   cleanup.focusText = () => { const ta = list.querySelector('textarea'); if (ta) { ta.focus(); const n = ta.value.length; ta.setSelectionRange(n, n); } };
   return cleanup;
 }

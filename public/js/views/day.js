@@ -82,6 +82,7 @@ export async function renderDay(day, query = {}) {
     const t = e.target;
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
     if (state.menuOpen || document.querySelector('.dlg-back')) return;
+    if (embedCleanup?.isEngaged?.()) return; // клавиатура у формы справа
     if (e.key in ARROW) {
       e.preventDefault();
       if (kbCursor === null) {
@@ -96,7 +97,7 @@ export async function renderDay(day, query = {}) {
       state.selection = new Set(Array.from({ length: hi - lo + 1 }, (_, i) => lo + i));
       selMode = true; draw();
     } else if (e.key === 'Enter' && selMode && state.selection.size) {
-      e.preventDefault(); embedCleanup?.focusText?.();
+      e.preventDefault(); e.stopImmediatePropagation(); embedCleanup?.engage?.();
     } else if (e.key === 'Escape' && selMode) {
       e.preventDefault(); exitSel();
     }
@@ -154,13 +155,13 @@ export async function renderDay(day, query = {}) {
     attachSweep(g);
     colL.appendChild(g);
     if (selMode) {
-      colL.appendChild(addBlock((kind) => {
+      colR.appendChild(addBlock((kind) => {
         if (kind === addKind) return;
         addKind = kind; embedKey = `${addKind}|${selectedHours().join(',')}`; mountEmbed(false); draw();
       }, addKind));
       const key = `${addKind}|${selectedHours().join(',')}`;
       if (key !== embedKey) { const same = embedKey.split('|')[0] === addKind; embedKey = key; mountEmbed(same); }
-      colL.appendChild(embedHost);
+      colR.appendChild(embedHost);
       return;
     }
     if (embedCleanup || embedKey) teardownEmbed();
