@@ -36,10 +36,10 @@ export function secTitle(text, { collapsed = null, onToggle = null } = {}) {
 }
 
 // Блок «Добавить» под сеткой в режиме выбора часов
-export function addBlock(onPick) {
+export function addBlock(onPick, active = null) {
   const el = h(`<div class="addblock"></div>`);
   el.appendChild(secTitle('Добавить'));
-  const row = h(`<div class="icons">${ADD_KINDS.map((k) => `<button class="${k.disabled ? 'off' : ''}" data-kind="${k.id}" title="${k.title}" ${k.disabled ? 'disabled' : ''}>${I[k.icon]}</button>`).join('')}</div>`);
+  const row = h(`<div class="icons">${ADD_KINDS.map((k) => `<button class="${k.disabled ? 'off' : ''} ${k.id === active ? 'on' : ''}" data-kind="${k.id}" title="${k.title}" ${k.disabled ? 'disabled' : ''}>${I[k.icon]}</button>`).join('')}</div>`);
   row.addEventListener('click', (e) => { const b = e.target.closest('[data-kind]'); if (!b || b.disabled) return; onPick(b.dataset.kind); });
   el.appendChild(row);
   return el;

@@ -13,8 +13,12 @@ const KIND_TITLE = { activity: 'занятие', food: 'еду', task: 'зада
 const SEC_TITLE = { activity: 'Занятие', task: 'Задача', food: 'Еда', counter: 'Счетчик', thought: 'Мысли' };
 const PLACEHOLDER = { activity: 'чем занимались?', task: 'что за задача' };
 
-export async function renderAdd(q) {
-  const app = document.getElementById('app');
+// opts.host — встроенный режим (внутри представления дня): без шапки, переходов и клавиатуры экрана.
+// Возвращает функцию очистки; у неё есть getDraft/setDraft для переноса черновика между перемонтированиями.
+export async function renderAdd(q, opts = {}) {
+  const embed = !!opts.host;
+  const app = opts.host || document.getElementById('app');
+  const leave = (saved) => { if (!embed) location.hash = back; else if (saved) opts.onDone?.(); else opts.onCancel?.(); };
   const back = q.back ? decodeURIComponent(q.back) : (q.day ? `#/day/${q.day}` : '#/month');
   const isTaskSel = !!q.days;
   let day = q.day || (q.days ? q.days.split(',')[0] : todayStr());
@@ -58,16 +62,16 @@ export async function renderAdd(q) {
 
   // фон по виду записи, как в макетах
   const bgKind = entries[0]?.kind || kind;
-  document.body.classList.add(`bg-add-${bgKind}`);
+  if (!embed) document.body.classList.add(`bg-add-${bgKind}`);
   const hdrHost = h('<div></div>');
-  app.appendChild(hdrHost);
-  const page = h('<div class="page"></div>');
+  if (!embed) app.appendChild(hdrHost);
+  const page = h(`<div class="${embed ? 'add-embed' : 'page'}"></div>`);
   app.appendChild(page);
   const list = h('<div></div>');
   page.appendChild(list);
   const foot = h(`<div class="add-foot"><button data-act="cancel">Отменить</button><button data-act="save">Сохранить</button></div>`);
   page.appendChild(foot);
-  foot.querySelector('[data-act=cancel]').onclick = () => { location.hash = back; };
+  foot.querySelector('[data-act=cancel]').onclick = () => leave(false);
   foot.querySelector('[data-act=save]').onclick = save;
   // свернутые блоки — по индексу записи
   const collapsed = new Set();
@@ -78,7 +82,7 @@ export async function renderAdd(q) {
   function drawHeader() {
     hdrHost.innerHTML = '';
     const mid = h('<span class="when"></span>');
-    const hdr = selHeader({ mid, onClose: () => { location.hash = back; }, search: true });
+    const hdr = selHeader({ mid, onClose: () => leave(false), search: true });
     const openPop = (btn, make) => {
       const open = hdr.querySelector('.popover');
       if (open) { open.remove(); return; }
@@ -412,7 +416,7 @@ export async function renderAdd(q) {
       const empty = !en.id && !en.text.trim() && !en.activity_id && !(en.kind === 'counter' && en.counter_value != null) && !en.pending.length && !(en.kind === 'food' && en.kcal != null);
       if (!empty) { upsert.push(base); upsertEntries.push(en); }
     });
-    if (!upsert.length && !removed.length) { location.hash = back; return; }
+    if (!upsert.length && !removed.length) { leave(false); return; }
     const btn = foot.querySelector('[data-act=save]'); btn.disabled = true;
     try {
       const saved = await saveBatch(upsert, removed);
@@ -423,13 +427,13 @@ export async function renderAdd(q) {
       }
       invalidateEvents();
       toast('сохранено');
-      location.hash = back;
+      leave(true);
     } catch (e) { toast(e.message); btn.disabled = false; }
   }
 
   drawHeader();
   draw();
-  if (focusNew) { const last = list.lastElementChild; last?.scrollIntoView({ block: 'start' }); last?.querySelector('textarea, input')?.focus(); }
+  if (!embed && focusNew) { const last = list.lastElementChild; last?.scrollIntoView({ block: 'start' }); last?.querySelector('textarea, input')?.focus(); }
 
   // ---- клавиатура (десктоп): ←/→ цвет, пробел — тег, пробел — текст, Enter сохранить, Esc отмена, Delete удалить
   let kbMode = 'color';
@@ -437,6 +441,7 @@ export async function renderAdd(q) {
   function kbEl() { const i = primary(); return i < 0 ? null : list.children[i]; }
   function kbRefresh() {
     document.querySelectorAll('.kb').forEach((n) => n.classList.remove('kb'));
+    if (embed) return;
     const el = kbEl(); if (!el) return;
     if (kbMode === 'color') el.querySelector('.swatches')?.classList.add('kb');
     else if (kbMode === 'tag') el.querySelector('.tags')?.classList.add('kb');
@@ -449,17 +454,18 @@ export async function renderAdd(q) {
     const t = e.target;
     const inField = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
     if (inField && t !== ta) return;
+    if (embed && t !== ta) return;
     if (t === ta) {
       if (e.key === ' ' && e.shiftKey) { // Shift+пробел из текста — к следующему блоку (колесо: цвет → тег → текст)
         e.preventDefault(); ta.blur(); kbMode = 'color'; kbRefresh(); return;
       }
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
-      else if (e.key === 'Escape') { e.preventDefault(); location.hash = back; }
+      else if (e.key === 'Escape') { e.preventDefault(); leave(false); }
       return;
     }
     const en = entries[primary()];
     if (e.key === 'Enter') { e.preventDefault(); save(); return; }
-    if (e.key === 'Escape') { e.preventDefault(); location.hash = back; return; }
+    if (e.key === 'Escape') { e.preventDefault(); leave(false); return; }
     if (e.key === 'Delete') {
       e.preventDefault();
       if (!en.id) return;
@@ -490,7 +496,11 @@ export async function renderAdd(q) {
   }
   window.addEventListener('keydown', onKey);
   kbRefresh();
-  return () => { window.removeEventListener('keydown', onKey); document.body.classList.remove(`bg-add-${bgKind}`); };
+  const cleanup = () => { window.removeEventListener('keydown', onKey); if (!embed) document.body.classList.remove(`bg-add-${bgKind}`); };
+  cleanup.getDraft = () => { const en = entries.find((e) => !e.id && e.kind === kind); return en ? { text: en.text, activity_id: en.activity_id, tag_id: en.tag_id, planned: en.planned, done: en.done } : null; };
+  cleanup.setDraft = (d) => { const en = entries.find((e) => !e.id && e.kind === kind); if (en && d) { Object.assign(en, d); draw(); } };
+  cleanup.focusText = () => { const ta = list.querySelector('textarea'); if (ta) { ta.focus(); const n = ta.value.length; ta.setSelectionRange(n, n); } };
+  return cleanup;
 }
 
 function daysLabel(days) {

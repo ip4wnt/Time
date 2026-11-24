@@ -543,3 +543,8 @@ body.bg-year { overflow: hidden; }
 .ychart.sm .yl { grid-template-columns: 2.4rem auto; column-gap: .8rem; justify-content: start; }
 .ychart.sm .yl > i { width: 2.4rem; height: 2.4rem; }
 .ychart.sm .yl-p, .ychart.sm .yl-n { font-size: 1.6rem; line-height: 1.2; }
+
+.addblock .icons button { border-radius: 50%; transition: background .15s; }
+.addblock .icons button.on { background: #fff; color: #000; padding: .7rem; }
+.add-host { margin-top: 2.4rem; }
+.add-embed { padding: 0; }

@@ -6,6 +6,7 @@ import {
 } from '../state.js';
 import { h, toast } from '../ui.js';
 import { put } from '../api.js';
+import { renderAdd } from './add.js';
 import {
   calHeader, dayPicker, filtersBar, activeFilters, cellRows, hourChart, hourKey, sumLine, sumSep, hiddenInSummary,
   addBlock, selHeader, ROW_NEUTRAL,
@@ -41,6 +42,33 @@ export async function renderDay(day, query = {}) {
 
   // клавиатура: стрелки двигают выделение часа, Shift+стрелки растягивают диапазон
   let kbCursor = null; let kbAnchor = null;
+
+  // встроенное добавление: при выборе часов внизу сразу открывается форма занятия, иконки сверху переключают вид
+  let addKind = 'activity';
+  const embedHost = h('<div class="add-host"></div>');
+  let embedCleanup = null; let embedKey = ''; let mountToken = 0;
+  function teardownEmbed() {
+    mountToken++;
+    if (typeof embedCleanup === 'function') embedCleanup();
+    embedCleanup = null; embedKey = ''; embedHost.innerHTML = '';
+  }
+  async function mountEmbed(keepDraft) {
+    const token = ++mountToken;
+        const hrs = selectedHours().join(',');
+    const q = addKind === 'task' ? { days: day, hours: hrs, kind: 'task' } : { day, hours: hrs, kind: addKind };
+    const fresh = h('<div></div>');
+    const c = await renderAdd(q, {
+      host: fresh,
+      onDone: () => { teardownEmbed(); window.dispatchEvent(new HashChangeEvent('hashchange')); },
+      onCancel: () => exitSel(),
+    });
+    if (token !== mountToken) { if (typeof c === 'function') c(); return; }
+    const draft = keepDraft && embedCleanup?.getDraft ? embedCleanup.getDraft() : null; // берем в момент замены, чтобы не потерять набранное
+    if (typeof embedCleanup === 'function') embedCleanup();
+    embedCleanup = c;
+    if (draft) c.setDraft?.(draft);
+    embedHost.replaceChildren(fresh);
+  }
   function goAdd(kind) {
     const back = encodeURIComponent(`#/day/${day}`);
     const hrs = selectedHours().join(',');
@@ -68,7 +96,7 @@ export async function renderDay(day, query = {}) {
       state.selection = new Set(Array.from({ length: hi - lo + 1 }, (_, i) => lo + i));
       selMode = true; draw();
     } else if (e.key === 'Enter' && selMode && state.selection.size) {
-      e.preventDefault(); goAdd('activity');
+      e.preventDefault(); embedCleanup?.focusText?.();
     } else if (e.key === 'Escape' && selMode) {
       e.preventDefault(); exitSel();
     }
@@ -127,14 +155,16 @@ export async function renderDay(day, query = {}) {
     colL.appendChild(g);
     if (selMode) {
       colL.appendChild(addBlock((kind) => {
-        const back = encodeURIComponent(`#/day/${day}`);
-        const hrs = selectedHours().join(',');
-        location.hash = kind === 'task'
-          ? `#/add?days=${day}&hours=${hrs}&kind=task&back=${back}`
-          : `#/add?day=${day}&hours=${hrs}&kind=${kind}&back=${back}`;
-      }));
+        if (kind === addKind) return;
+        addKind = kind; embedKey = `${addKind}|${selectedHours().join(',')}`; mountEmbed(false); draw();
+      }, addKind));
+      const key = `${addKind}|${selectedHours().join(',')}`;
+      if (key !== embedKey) { const same = embedKey.split('|')[0] === addKind; embedKey = key; mountEmbed(same); }
+      colL.appendChild(embedHost);
       return;
     }
+    if (embedCleanup || embedKey) teardownEmbed();
+    addKind = 'activity';
     colL.appendChild(filtersBar(() => draw()));
 
     drawActivities();
@@ -304,5 +334,5 @@ export async function renderDay(day, query = {}) {
   }
 
   draw();
-  return () => { window.removeEventListener('keydown', onKey); document.querySelectorAll('.selbar').forEach((b) => b.remove()); document.body.classList.remove('bg-day', 'bg-hours'); };
+  return () => { window.removeEventListener('keydown', onKey); teardownEmbed(); document.querySelectorAll('.selbar').forEach((b) => b.remove()); document.body.classList.remove('bg-day', 'bg-hours'); };
 }
