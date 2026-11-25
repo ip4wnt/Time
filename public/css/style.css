@@ -588,3 +588,18 @@ body.bg-year { overflow: hidden; }
   .picker .hpick button { height: 8rem; font-size: 2.8rem; }
   .picker .btn.small { height: 6.4rem; font-size: 2.4rem; padding: 0 3rem; }
 }
+
+.pnote-act { display: flex; justify-content: flex-end; gap: 1.2rem; margin-top: 1.2rem; }
+@media (max-width: 1099px) { .pnote-act .btn.small { height: 6rem; font-size: 2.2rem; padding: 0 3rem; } }
+
+/* выпадающие календари на десктопе: на 20% крупнее */
+@media (min-width: 1100px) {
+  .popover.picker { min-width: 40.8rem; gap: 1.7rem; padding: 1.7rem; }
+  .picker .pick-head { font-size: 2.4rem; }
+  .picker .pick-nav { width: 4.8rem; height: 4.8rem; }
+  .picker .pick-nav svg { width: 2.6rem; height: 2.6rem; }
+  .picker .pick-months button { height: 5.3rem; font-size: 2rem; }
+  .picker .pick-week { font-size: 1.8rem; }
+  .picker .pick-days button { height: 4.8rem; font-size: 1.9rem; }
+  .picker .hpick button { height: 6.5rem; font-size: 2.2rem; }
+}

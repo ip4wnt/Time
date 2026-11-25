@@ -124,20 +124,17 @@ export async function renderAdd(q, opts = {}) {
     entries.forEach((en, i) => list.appendChild(entryEl(en, i)));
   }
 
-  // Занятие удаляется сразу, без подтверждения и без «сохранить»; остальные виды — как раньше (подтверждение, удаление при сохранении)
+  // Любая запись удаляется сразу: без подтверждения и без «сохранить»
   async function removeEntry(i) {
     const en = entries[i]; if (!en) return;
-    if (en.id && en.kind === 'activity') {
+    if (en.id) {
       try { await del(`/api/events/${en.id}`); } catch (e) { toast(e.message); return; }
       invalidateEvents();
       opts.onChange?.();
-    } else if (en.id) {
-      const ok = await confirm('Удалить эту запись?', 'удалить'); if (!ok) return;
-      removed.push(en.id);
     }
     entries.splice(i, 1);
     if (!entries.length) {
-      if (!embed && editId && en.id && en.kind === 'activity') { leave(true); return; }
+      if (!embed && editId && en.id) { leave(true); return; }
       // после удаления последней записи час свободен — предлагаем занятие, а не новый пустой счетчик
       entries.push(blank(isTaskSel || en.kind === 'task' ? 'task' : 'activity'));
     }

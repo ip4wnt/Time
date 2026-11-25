@@ -2,7 +2,7 @@
 import { I, KIND_ICON } from '../icons.js';
 import { state, savePrefs, esc, activity, isSleepEvent, KINDS, MONTHS_FULL, monthGrid, todayStr, ymOf, addMonths, WEEKDAYS, activeActivities } from '../state.js';
 import { get, put } from '../api.js';
-import { h } from '../ui.js';
+import { h, toast } from '../ui.js';
 
 // Порядок кнопок-фильтров под сеткой — как в макете.
 export const FILTERS = [
@@ -311,19 +311,21 @@ export function hourChart(counts, total, small = false) {
   </div>`);
 }
 
-// Поле заметки периода: «чем запомнился день», «важное в этом месяце». Сохраняется само, через паузу после ввода.
+// Поле заметки периода: «чем запомнился день», «важное в этом месяце». Сохраняется кнопкой; «очистить» стирает и сохраняет сразу.
 const noteCache = new Map();
 export function periodNote(scope, key, label) {
-  const el = h(`<div class="pnote"><div class="pnote-label">${label}</div><textarea class="ta pnote-ta" rows="3"></textarea></div>`);
+  const el = h(`<div class="pnote"><div class="pnote-label">${label}</div><textarea class="ta pnote-ta" rows="3"></textarea>
+    <div class="pnote-act"><button class="btn small ghost" data-act="clear">очистить</button><button class="btn small" data-act="save">сохранить</button></div></div>`);
   const ta = el.querySelector('textarea');
   const url = `/api/period-notes/${scope}/${key}`;
-  let timer = null; let dirty = false;
+  let touched = false;
   if (noteCache.has(url)) ta.value = noteCache.get(url);
-  else get(url).then((r) => { if (!dirty) { ta.value = (r && r.text) || ''; noteCache.set(url, ta.value); } }).catch(() => {});
-  const flush = () => { clearTimeout(timer); if (!dirty) return; dirty = false; put(url, { text: ta.value }).catch(() => { dirty = true; }); };
-  ta.addEventListener('input', () => { dirty = true; noteCache.set(url, ta.value); clearTimeout(timer); timer = setTimeout(flush, 700); });
-  ta.addEventListener('blur', flush);
-  window.addEventListener('pagehide', flush);
-  el.flush = flush;
+  else get(url).then((r) => { if (!touched) { ta.value = (r && r.text) || ''; noteCache.set(url, ta.value); } }).catch(() => {});
+  ta.addEventListener('input', () => { touched = true; });
+  const send = async (msg) => {
+    try { await put(url, { text: ta.value }); noteCache.set(url, ta.value); toast(msg); } catch (e) { toast(e.message); }
+  };
+  el.querySelector('[data-act=save]').onclick = () => send('сохранено');
+  el.querySelector('[data-act=clear]').onclick = () => { touched = true; ta.value = ''; send('очищено'); };
   return el;
 }
