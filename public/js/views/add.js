@@ -124,6 +124,26 @@ export async function renderAdd(q, opts = {}) {
     entries.forEach((en, i) => list.appendChild(entryEl(en, i)));
   }
 
+  // Занятие удаляется сразу, без подтверждения и без «сохранить»; остальные виды — как раньше (подтверждение, удаление при сохранении)
+  async function removeEntry(i) {
+    const en = entries[i]; if (!en) return;
+    if (en.id && en.kind === 'activity') {
+      try { await del(`/api/events/${en.id}`); } catch (e) { toast(e.message); return; }
+      invalidateEvents();
+      opts.onChange?.();
+    } else if (en.id) {
+      const ok = await confirm('Удалить эту запись?', 'удалить'); if (!ok) return;
+      removed.push(en.id);
+    }
+    entries.splice(i, 1);
+    if (!entries.length) {
+      if (!embed && editId && en.id && en.kind === 'activity') { leave(true); return; }
+      // после удаления последней записи час свободен — предлагаем занятие, а не новый пустой счетчик
+      entries.push(blank(isTaskSel || en.kind === 'task' ? 'task' : 'activity'));
+    }
+    draw(); kbRefresh();
+  }
+
   function entryEl(en, i) {
     const el = h(`<section class="entry" data-i="${i}">
       <div class="entry-body"></div>
@@ -147,13 +167,7 @@ export async function renderAdd(q, opts = {}) {
     tools.querySelector('[data-act=plus]').onclick = () => { entries.splice(i + 1, 0, blank(en.kind)); draw(); };
     tools.querySelector('[data-act=up]').onclick = () => { if (i === 0) return; [entries[i - 1], entries[i]] = [entries[i], entries[i - 1]]; draw(); };
     tools.querySelector('[data-act=down]').onclick = () => { if (i === entries.length - 1) return; [entries[i + 1], entries[i]] = [entries[i], entries[i + 1]]; draw(); };
-    tools.querySelector('[data-act=remove]').onclick = async () => {
-      if (en.id) { const ok = await confirm('Удалить эту запись?', 'удалить'); if (!ok) return; removed.push(en.id); }
-      entries.splice(i, 1);
-      // после удаления последней записи час свободен — предлагаем занятие, а не новый пустой счетчик
-      if (!entries.length) entries.push(blank(isTaskSel || en.kind === 'task' ? 'task' : 'activity'));
-      draw();
-    };
+    tools.querySelector('[data-act=remove]').onclick = () => removeEntry(i);
     tools.querySelector('[data-act=attach]').onclick = () => pickFiles(en, el);
     if (en.kind === 'activity') activityBody(en, body);
     else if (en.kind === 'food') foodBody(en, body);
@@ -485,7 +499,7 @@ export async function renderAdd(q, opts = {}) {
     if (e.key === 'Delete') {
       e.preventDefault();
       if (!en.id) return;
-      confirm('Удалить эту запись?', 'удалить').then((ok) => { if (!ok) return; removed.push(en.id); entries.splice(primary(), 1); save(); });
+      removeEntry(primary());
       return;
     }
     if (e.key === ' ') { e.preventDefault(); kbNext(); return; }

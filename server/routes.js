@@ -340,6 +340,27 @@ router.add('PUT', '/api/dates/:id', async ({ q, user, body, params }) => {
 });
 router.add('DELETE', '/api/dates/:id', async ({ q, user, params }) => { await q.query('DELETE FROM important_dates WHERE id=$1 AND user_id=$2', [int(params.id), user.id]); return { ok: true }; });
 
+// ---------------- заметки периода (день, месяц) ----------------
+function periodKey(params) {
+  const scope = params.scope; const key = params.key;
+  const ok = (scope === 'day' && /^\d{4}-\d{2}-\d{2}$/.test(key)) || (scope === 'month' && /^\d{4}-\d{2}$/.test(key));
+  if (!ok) throw new HttpError(400, 'Неверный период');
+  return { scope, key };
+}
+router.add('GET', '/api/period-notes/:scope/:key', async ({ q, user, params }) => {
+  const { scope, key } = periodKey(params);
+  const r = await q.query('SELECT text FROM period_notes WHERE user_id=$1 AND scope=$2 AND key=$3', [user.id, scope, key]);
+  return { text: r.rows[0] ? r.rows[0].text : '' };
+});
+router.add('PUT', '/api/period-notes/:scope/:key', async ({ q, user, params, body }) => {
+  const { scope, key } = periodKey(params);
+  const text = str(body && body.text, 20000);
+  if (!text.trim()) { await q.query('DELETE FROM period_notes WHERE user_id=$1 AND scope=$2 AND key=$3', [user.id, scope, key]); return { text: '' }; }
+  await q.query(`INSERT INTO period_notes(user_id, scope, key, text) VALUES ($1,$2,$3,$4)
+    ON CONFLICT (user_id, scope, key) DO UPDATE SET text=EXCLUDED.text, updated_at=now()`, [user.id, scope, key, text]);
+  return { text };
+});
+
 // ---------------- notes ----------------
 router.add('GET', '/api/notes', async ({ q, user }) => {
   const r = await q.query(`SELECT n.id, n.parent_id, n.kind, n.title, n.icon, n.position, n.updated_at, length(n.content) AS content_length,

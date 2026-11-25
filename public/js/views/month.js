@@ -8,7 +8,7 @@ import {
 import { h, toast } from '../ui.js';
 import { put } from '../api.js';
 import {
-  calHeader, monthPicker, filtersBar, activeFilters, cellRows, hourChart, hourKey, sumLine, sumSep, hiddenInSummary,
+  calHeader, monthPicker, filtersBar, activeFilters, cellRows, hourChart, hourKey, periodNote, sumLine, sumSep, hiddenInSummary,
   ROW_NEUTRAL, ROW_OVER, ROW_UNDER,
 } from './common.js';
 
@@ -88,6 +88,7 @@ export async function renderMonth(ym, query = {}) {
       else if (f === 'thought') drawThoughtsSummary();
     }
     drawChart();
+    colR.appendChild(periodNote('month', ym, 'важное в этом месяце:'));
   }
 
   // наложения на ячейку дня

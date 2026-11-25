@@ -1,6 +1,7 @@
 // Общие блоки календарных экранов: шапка-крошки, фильтры, выбор даты, строки саммари.
 import { I, KIND_ICON } from '../icons.js';
 import { state, savePrefs, esc, activity, isSleepEvent, KINDS, MONTHS_FULL, monthGrid, todayStr, ymOf, addMonths, WEEKDAYS, activeActivities } from '../state.js';
+import { get, put } from '../api.js';
 import { h } from '../ui.js';
 
 // Порядок кнопок-фильтров под сеткой — как в макете.
@@ -308,4 +309,21 @@ export function hourChart(counts, total, small = false) {
     <div class="ychart-bar">${items.map((i) => `<i style="flex:${i.n};background:${i.color}" title="${esc(i.name)}"></i>`).join('')}</div>
     <div class="ychart-legend">${items.map((i) => `<div class="yl"><i style="background:${i.color}"></i><span class="yl-p">${pct(i.n)}</span><span class="yl-n">${i.n}</span></div>`).join('')}</div>
   </div>`);
+}
+
+// Поле заметки периода: «чем запомнился день», «важное в этом месяце». Сохраняется само, через паузу после ввода.
+const noteCache = new Map();
+export function periodNote(scope, key, label) {
+  const el = h(`<div class="pnote"><div class="pnote-label">${label}</div><textarea class="ta pnote-ta" rows="3"></textarea></div>`);
+  const ta = el.querySelector('textarea');
+  const url = `/api/period-notes/${scope}/${key}`;
+  let timer = null; let dirty = false;
+  if (noteCache.has(url)) ta.value = noteCache.get(url);
+  else get(url).then((r) => { if (!dirty) { ta.value = (r && r.text) || ''; noteCache.set(url, ta.value); } }).catch(() => {});
+  const flush = () => { clearTimeout(timer); if (!dirty) return; dirty = false; put(url, { text: ta.value }).catch(() => { dirty = true; }); };
+  ta.addEventListener('input', () => { dirty = true; noteCache.set(url, ta.value); clearTimeout(timer); timer = setTimeout(flush, 700); });
+  ta.addEventListener('blur', flush);
+  window.addEventListener('pagehide', flush);
+  el.flush = flush;
+  return el;
 }

@@ -172,6 +172,17 @@ CREATE TABLE IF NOT EXISTS files (
 CREATE INDEX IF NOT EXISTS files_note_idx ON files(note_id);
 CREATE INDEX IF NOT EXISTS files_event_idx ON files(event_id);
 
+-- ===== Заметки периода: «чем запомнился день», «важное в этом месяце» =====
+CREATE TABLE IF NOT EXISTS period_notes (
+  id         BIGSERIAL PRIMARY KEY,
+  user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  scope      TEXT NOT NULL CHECK (scope IN ('day','month')),
+  key        TEXT NOT NULL,                      -- YYYY-MM-DD или YYYY-MM
+  text       TEXT NOT NULL DEFAULT '',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, scope, key)
+);
+
 -- ===== Изоляция данных пользователей на уровне базы (Row Level Security) =====
 -- Приложение открывает транзакцию и выставляет chronum.user_id (см. db.withUser).
 -- После этого строки других пользователей не видны и не записываются — даже если
@@ -186,7 +197,7 @@ DECLARE
     OR current_setting('chronum.admin', true) = 'on'
   )$c$;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['activities', 'tags', 'counters', 'events', 'important_dates', 'notes', 'files'] LOOP
+  FOREACH t IN ARRAY ARRAY['activities', 'tags', 'counters', 'events', 'important_dates', 'notes', 'files', 'period_notes'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS %I ON %I', t || '_own', t);

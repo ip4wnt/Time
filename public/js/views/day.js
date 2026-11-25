@@ -8,7 +8,7 @@ import { h, toast } from '../ui.js';
 import { put } from '../api.js';
 import { renderAdd } from './add.js';
 import {
-  calHeader, dayPicker, filtersBar, activeFilters, cellRows, hourChart, hourKey, sumLine, sumSep, hiddenInSummary,
+  calHeader, dayPicker, filtersBar, activeFilters, cellRows, hourChart, hourKey, periodNote, sumLine, sumSep, hiddenInSummary,
   addBlock, selHeader, ROW_NEUTRAL,
 } from './common.js';
 
@@ -28,12 +28,18 @@ export async function renderDay(day, query = {}) {
   // на десктопе слева часы с фильтрами, справа сводка дня
   let colL = null; let colR = null;
 
-  const [evs] = await Promise.all([loadDay(day), loadDates().catch(() => null)]);
-  const hm = hourMap(evs);
-  const tasks = evs.filter((e) => e.kind === 'task');
-  // задачи могут быть привязаны к часу — собираем их по часам для наложений
-  const taskHours = Array.from({ length: 24 }, () => []);
-  for (const t of tasks) for (const hr of t.hours || []) if (hr >= 0 && hr < 24) taskHours[hr].push(t);
+  let evs; let hm; let tasks; let taskHours;
+  function indexDay(list) {
+    evs = list; hm = hourMap(evs);
+    tasks = evs.filter((e) => e.kind === 'task');
+    // задачи могут быть привязаны к часу — собираем их по часам для наложений
+    taskHours = Array.from({ length: 24 }, () => []);
+    for (const t of tasks) for (const hr of t.hours || []) if (hr >= 0 && hr < 24) taskHours[hr].push(t);
+  }
+  const [dayList] = await Promise.all([loadDay(day), loadDates().catch(() => null)]);
+  indexDay(dayList);
+  // после удаления записи в форме: перечитываем день и перерисовываем, не выходя из выбора часов
+  async function reloadDay() { indexDay(await loadDay(day)); draw(); }
   const isToday = day === todayStr();
   const nowHour = new Date().getHours();
   const tc = topCounter();
@@ -61,6 +67,7 @@ export async function renderDay(day, query = {}) {
       host: fresh,
       onDone: () => { teardownEmbed(); window.dispatchEvent(new HashChangeEvent('hashchange')); },
       onCancel: () => exitSel(),
+      onChange: () => reloadDay(),
     });
     if (token !== mountToken) { if (typeof c === 'function') c(); return; }
     const draft = keepDraft && embedCleanup?.getDraft ? embedCleanup.getDraft() : null; // берем в момент замены, чтобы не потерять набранное
@@ -177,6 +184,7 @@ export async function renderDay(day, query = {}) {
       else if (f === 'thought') drawThoughts();
     }
     drawChart();
+    colR.appendChild(periodNote('day', day, 'чем запомнился день:'));
   }
 
   // наложения на ячейку часа
@@ -267,13 +275,13 @@ export async function renderDay(day, query = {}) {
     return `<span class="ico" style="display:inline-block;width:1.6rem;height:1.6rem;vertical-align:middle;margin-right:.6rem">${I[KIND_ICON[e.kind]]}</span>`;
   }
 
+  // Комментарии к часам: час или диапазон, цвет занятия и текст. Занятия без комментария здесь не нужны: они видны в квадратиках.
   function drawActivities() {
     const box = h('<div class="summary"></div>');
-    // по умолчанию в сводке только занятия; остальные виды добавляются фильтрами
-    const list = evs.filter((e) => e.kind === 'activity' && !hiddenInSummary(e) && !(isSleepEvent(e) && !(e.text || '').trim()))
+    const list = evs.filter((e) => e.kind === 'activity' && (e.text || '').trim())
       .sort((a, b) => (a.hours[0] - b.hours[0]) || (a.position - b.position));
-    for (const e of list) box.appendChild(sumLine(hoursLabel(e.hours), labelFor(e), { files: (e.files || []).length, prefix: prefixFor(e), onClick: () => openEvent(e) }));
-    if (!list.length) box.appendChild(h(`<p class="p">${state.hiddenActivities.size ? 'по выбранным занятиям в этот день ничего нет' : 'в этот день пока нет занятий\u00a0— нажмите на час, чтобы добавить запись'}</p>`));
+    for (const e of list) box.appendChild(sumLine(hoursLabel(e.hours), (e.text || '').trim(), { files: (e.files || []).length, prefix: prefixFor(e), onClick: () => openEvent(e) }));
+    if (!list.length) box.appendChild(h('<p class="p">комментариев к часам пока нет</p>'));
     colR.appendChild(box);
   }
 
