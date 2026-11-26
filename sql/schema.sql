@@ -225,3 +225,8 @@ CREATE INDEX IF NOT EXISTS leads_created_idx ON leads(created_at DESC);
 CREATE INDEX IF NOT EXISTS leads_ip_idx ON leads(ip, created_at DESC);
 
 ALTER TABLE events ADD COLUMN IF NOT EXISTS planned BOOLEAN NOT NULL DEFAULT false;
+
+-- Циферблат: точный диапазон занятия в минутах от 0:00 [начало, конец], кратные 15.
+-- NULL — запись по целым часам (как раньше). hours всегда заполнен и содержит все затронутые часы,
+-- поэтому месяц, год, поиск и старые клиенты работают без изменений.
+ALTER TABLE events ADD COLUMN IF NOT EXISTS span_min SMALLINT[];

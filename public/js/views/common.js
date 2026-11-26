@@ -1,6 +1,6 @@
 // Общие блоки календарных экранов: шапка-крошки, фильтры, выбор даты, строки саммари.
 import { I, KIND_ICON } from '../icons.js';
-import { state, savePrefs, esc, activity, isSleepEvent, KINDS, MONTHS_FULL, monthGrid, todayStr, ymOf, addMonths, WEEKDAYS, activeActivities } from '../state.js';
+import { state, savePrefs, esc, activity, isSleepEvent, KINDS, MONTHS_FULL, monthGrid, todayStr, ymOf, addMonths, WEEKDAYS, activeActivities, fmtHours } from '../state.js';
 import { get, put } from '../api.js';
 import { h, toast } from '../ui.js';
 
@@ -37,9 +37,10 @@ export function secTitle(text, { collapsed = null, onToggle = null } = {}) {
 }
 
 // Блок «Добавить» под сеткой в режиме выбора часов
+const ADD_TITLE = { activity: 'Занятие', task: 'Задача', food: 'Еда', counter: 'Счетчик', thought: 'Мысли' };
 export function addBlock(onPick, active = null) {
   const el = h(`<div class="addblock"></div>`);
-  el.appendChild(secTitle('Добавить'));
+  el.appendChild(secTitle(ADD_TITLE[active] || 'Добавить'));
   const row = h(`<div class="icons">${ADD_KINDS.map((k) => `<button class="${k.disabled ? 'off' : ''} ${k.id === active ? 'on' : ''}" data-kind="${k.id}" title="${k.title}" ${k.disabled ? 'disabled' : ''}>${I[k.icon]}</button>`).join('')}</div>`);
   row.addEventListener('click', (e) => { const b = e.target.closest('[data-kind]'); if (!b || b.disabled) return; onPick(b.dataset.kind); });
   el.appendChild(row);
@@ -307,7 +308,7 @@ export function hourChart(counts, total, small = false) {
   const pct = (n) => { const p = n / total * 100; return p > 0 && p < 1 ? '<1%' : `${Math.round(p)}%`; };
   return h(`<div class="ychart${small ? ' sm' : ''}">
     <div class="ychart-bar">${items.map((i) => `<i style="flex:${i.n};background:${i.color}" title="${esc(i.name)}"></i>`).join('')}</div>
-    <div class="ychart-legend">${items.map((i) => `<div class="yl"><i style="background:${i.color}"></i><span class="yl-p">${pct(i.n)}</span><span class="yl-n">${i.n}</span></div>`).join('')}</div>
+    <div class="ychart-legend">${items.map((i) => `<div class="yl"><i style="background:${i.color}"></i><span class="yl-p">${pct(i.n)}</span><span class="yl-n">${fmtHours(i.n)}</span></div>`).join('')}</div>
   </div>`);
 }
 

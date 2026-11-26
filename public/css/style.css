@@ -603,3 +603,11 @@ body.bg-year { overflow: hidden; }
   .picker .pick-days button { height: 4.8rem; font-size: 1.9rem; }
   .picker .hpick button { height: 6.5rem; font-size: 2.2rem; }
 }
+
+/* ---------- циферблат дня ---------- */
+.dial-wrap { display: flex; justify-content: center; align-items: center; padding: 1.2rem 0 1.6rem; user-select: none; -webkit-user-select: none; }
+.dial { width: min(100%, 52rem); height: auto; display: block; touch-action: none; -webkit-tap-highlight-color: transparent; cursor: pointer; }
+.dial text { font-family: inherit; pointer-events: none; }
+.dial-center text, .dial-frame, .dial-ticks, .dial-arcs { pointer-events: none; }
+.cell.partial { border-color: transparent; }
+.cell.partial.selected { border-color: var(--num); }

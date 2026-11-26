@@ -170,7 +170,7 @@ router.add('GET', '/api/counters/:id/stats', async ({ q, user, params }) => {
 });
 
 // ---------------- events ----------------
-const EVENT_COLS = 'id, kind, day, hours, days, position, activity_id, tag_id, text, mood, kcal, protein, fat, carbs, food_calc, counter_id, counter_value, done, done_at, planned, created_at, updated_at';
+const EVENT_COLS = 'id, kind, day, hours, span_min, days, position, activity_id, tag_id, text, mood, kcal, protein, fat, carbs, food_calc, counter_id, counter_value, done, done_at, planned, created_at, updated_at';
 function fmtEvent(e) {
   e.day = dateStr(e.day);
   if (e.days) e.days = e.days.map(dateStr);
@@ -207,10 +207,12 @@ router.add('GET', '/api/events', async ({ q, user, query }) => {
   return { events: await eventsInRange(q, user.id, query.from, query.to) };
 });
 
+function spanHours([a, b]) { const out = []; for (let h = Math.floor(a / 60); h <= Math.ceil(b / 60) - 1; h++) out.push(h); return out; }
+
 function validateEvent(e) {
   const kinds = ['activity', 'task', 'food', 'thought', 'counter'];
   if (!kinds.includes(e.kind)) throw new HttpError(400, 'Неизвестный тип события');
-  const out = { kind: e.kind, text: str(e.text, 20000), position: e.position != null ? int(e.position) : 0 };
+  const out = { kind: e.kind, text: str(e.text, 20000), position: e.position != null ? int(e.position) : 0, span_min: null };
   if (e.kind === 'task') {
     const days = Array.isArray(e.days) ? e.days.filter(isDate) : [];
     if (!days.length) throw new HttpError(400, 'У задачи должны быть дни');
@@ -220,9 +222,18 @@ function validateEvent(e) {
     out.hours = out.days.length === 1 && th.length ? [...new Set(th)].sort((a, b) => a - b) : null;
   } else {
     if (!isDate(e.day)) throw new HttpError(400, 'Нужен день');
-    const hours = Array.isArray(e.hours) ? e.hours.map((h) => int(h)).filter((h) => h >= 0 && h <= 23) : [];
-    if (!hours.length) throw new HttpError(400, 'Нужны часы');
-    out.day = e.day; out.hours = [...new Set(hours)].sort((a, b) => a - b); out.days = null;
+    // точный диапазон с циферблата: [начало, конец] в минутах, шаг 15; hours выводим из него
+    const sp = Array.isArray(e.span_min) && e.span_min.length === 2 ? e.span_min.map(Number) : null;
+    if (sp) {
+      if (!sp.every(Number.isInteger) || sp[0] < 0 || sp[1] > 1440 || sp[0] >= sp[1] || sp[0] % 15 || sp[1] % 15) throw new HttpError(400, 'Неверный диапазон времени');
+      out.span_min = sp;
+      out.hours = spanHours(sp);
+    } else {
+      const hours = Array.isArray(e.hours) ? e.hours.map((h) => int(h)).filter((h) => h >= 0 && h <= 23) : [];
+      if (!hours.length) throw new HttpError(400, 'Нужны часы');
+      out.hours = [...new Set(hours)].sort((a, b) => a - b);
+    }
+    out.day = e.day; out.days = null;
   }
   out.activity_id = e.activity_id != null && e.activity_id !== '' ? int(e.activity_id) : null;
   out.tag_id = e.tag_id != null && e.tag_id !== '' ? int(e.tag_id) : null;
@@ -243,12 +254,64 @@ async function ownsRefs(c, userId, ev) {
   if (ev.counter_id != null) { const r = await c.query('SELECT 1 FROM counters WHERE id=$1 AND user_id=$2', [ev.counter_id, userId]); if (!r.rowCount) throw new HttpError(400, 'Счётчик не найден'); }
 }
 
-const INSERT_SQL = `INSERT INTO events(user_id, kind, day, hours, days, position, activity_id, tag_id, text, mood, kcal, protein, fat, carbs, food_calc, counter_id, counter_value, done, done_at, planned)
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18, CASE WHEN $18 THEN now() ELSE NULL END, $19) RETURNING ${EVENT_COLS}`;
-const UPDATE_SQL = `UPDATE events SET kind=$3, day=$4, hours=$5, days=$6, position=$7, activity_id=$8, tag_id=$9, text=$10, mood=$11, kcal=$12, protein=$13, fat=$14, carbs=$15, food_calc=$16, counter_id=$17, counter_value=$18,
+const INSERT_SQL = `INSERT INTO events(user_id, kind, day, hours, span_min, days, position, activity_id, tag_id, text, mood, kcal, protein, fat, carbs, food_calc, counter_id, counter_value, done, done_at, planned)
+  VALUES ($1,$2,$3,$4,$20,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18, CASE WHEN $18 THEN now() ELSE NULL END, $19) RETURNING ${EVENT_COLS}`;
+const UPDATE_SQL = `UPDATE events SET kind=$3, day=$4, hours=$5, span_min=$21, days=$6, position=$7, activity_id=$8, tag_id=$9, text=$10, mood=$11, kcal=$12, protein=$13, fat=$14, carbs=$15, food_calc=$16, counter_id=$17, counter_value=$18,
   done=$19, done_at = CASE WHEN $19 AND done_at IS NULL THEN now() WHEN NOT $19 THEN NULL ELSE done_at END, planned=$20, updated_at=now() WHERE id=$1 AND user_id=$2 RETURNING ${EVENT_COLS}`;
-function insertParams(userId, v) { return [userId, v.kind, v.day, v.hours, v.days, v.position, v.activity_id, v.tag_id, v.text, v.mood, v.kcal, v.protein, v.fat, v.carbs, v.food_calc, v.counter_id, v.counter_value, v.done, v.planned]; }
-function updateParams(id, userId, v) { return [id, userId, v.kind, v.day, v.hours, v.days, v.position, v.activity_id, v.tag_id, v.text, v.mood, v.kcal, v.protein, v.fat, v.carbs, v.food_calc, v.counter_id, v.counter_value, v.done, v.planned]; }
+function insertParams(userId, v) { return [userId, v.kind, v.day, v.hours, v.days, v.position, v.activity_id, v.tag_id, v.text, v.mood, v.kcal, v.protein, v.fat, v.carbs, v.food_calc, v.counter_id, v.counter_value, v.done, v.planned, v.span_min]; }
+function updateParams(id, userId, v) { return [id, userId, v.kind, v.day, v.hours, v.days, v.position, v.activity_id, v.tag_id, v.text, v.mood, v.kcal, v.protein, v.fat, v.carbs, v.food_calc, v.counter_id, v.counter_value, v.done, v.planned, v.span_min]; }
+
+// ---- пересечения занятий внутри дня ----
+// Новое (или сдвинутое) занятие забирает себе время: у ранее созданных занятий того же дня вырезается пересечение.
+// Целиком перекрытые записи удаляются, частично — укорачиваются, а если новое попало в середину — делятся на две.
+// Без подтверждений: это правило для любого вида отображения дня.
+function eventSegments(e) {
+  if (Array.isArray(e.span_min) && e.span_min.length === 2) return [[e.span_min[0], e.span_min[1]]];
+  const hs = [...(e.hours || [])].sort((a, b) => a - b);
+  const out = [];
+  for (let i = 0; i < hs.length;) { let j = i; while (j + 1 < hs.length && hs[j + 1] === hs[j] + 1) j++; out.push([hs[i] * 60, (hs[j] + 1) * 60]); i = j + 1; }
+  return out;
+}
+function subtractSegs(segs, cut) {
+  let cur = segs;
+  for (const [cs, ce] of cut) {
+    const next = [];
+    for (const [a, b] of cur) {
+      if (ce <= a || cs >= b) { next.push([a, b]); continue; }
+      if (cs > a) next.push([a, cs]);
+      if (ce < b) next.push([ce, b]);
+    }
+    cur = next;
+  }
+  return cur;
+}
+async function claimTime(c, userId, claimer, skipIds = []) {
+  const r = await c.query(`SELECT ${EVENT_COLS} FROM events WHERE user_id=$1 AND kind='activity' AND day=$2 AND id<>ALL($3::bigint[]) AND hours && $4::smallint[]`,
+    [userId, claimer.day, skipIds, claimer.hours]);
+  const cut = eventSegments(claimer);
+  for (const old of r.rows) {
+    const segs = eventSegments(old);
+    const left = subtractSegs(segs, cut);
+    if (left.length === segs.length && left.every(([a, b], i) => a === segs[i][0] && b === segs[i][1])) continue; // не пересекается по минутам
+    if (!left.length) { await c.query('DELETE FROM events WHERE id=$1 AND user_id=$2', [old.id, userId]); continue; }
+    const aligned = left.every(([a, b]) => a % 60 === 0 && b % 60 === 0);
+    const pieces = [];
+    if (!old.span_min && aligned) {
+      // запись по целым часам остаётся одной записью с оставшимися часами
+      const hs = []; for (const [a, b] of left) for (let m = a; m < b; m += 60) hs.push(m / 60);
+      pieces.push({ hours: hs, span: null });
+    } else {
+      for (const [a, b] of left) pieces.push({ hours: spanHours([a, b]), span: [a, b] });
+    }
+    const [first, ...rest] = pieces;
+    await c.query('UPDATE events SET hours=$3, span_min=$4, updated_at=now() WHERE id=$1 AND user_id=$2', [old.id, userId, first.hours, first.span]);
+    for (const p of rest) {
+      await c.query(`INSERT INTO events(user_id, kind, day, hours, span_min, position, activity_id, tag_id, text, planned, done, done_at)
+        SELECT user_id, kind, day, $3::smallint[], $4::smallint[], position, activity_id, tag_id, text, planned, done, done_at FROM events WHERE id=$1 AND user_id=$2`,
+      [old.id, userId, p.hours, p.span]);
+    }
+  }
+}
 
 // Пакетное сохранение экрана «добавить»: upsert + delete в одной транзакции
 router.add('POST', '/api/events/batch', async ({ q, user, body }) => {
@@ -256,15 +319,29 @@ router.add('POST', '/api/events/batch', async ({ q, user, body }) => {
   const del = Array.isArray(body.delete) ? body.delete.map((x) => int(x)) : [];
   const saved = await tx(q, async (c) => {
     const out = [];
+    const claimers = [];
     if (del.length) await c.query('DELETE FROM events WHERE user_id=$1 AND id = ANY($2::bigint[])', [user.id, del]);
     for (const e of upsert) {
       const v = validateEvent(e);
       await ownsRefs(c, user.id, v);
       let r;
-      if (e.id) r = await c.query(UPDATE_SQL, updateParams(int(e.id), user.id, v));
-      else r = await c.query(INSERT_SQL, insertParams(user.id, v));
-      if (r.rowCount) out.push(fmtEvent(r.rows[0]));
+      let before = null;
+      if (e.id) {
+        const b = await c.query(`SELECT ${EVENT_COLS} FROM events WHERE id=$1 AND user_id=$2`, [int(e.id), user.id]);
+        before = b.rows[0] || null;
+        r = await c.query(UPDATE_SQL, updateParams(int(e.id), user.id, v));
+      } else r = await c.query(INSERT_SQL, insertParams(user.id, v));
+      if (!r.rowCount) continue;
+      const row = fmtEvent(r.rows[0]);
+      out.push(row);
+      // занятие «забирает» время, если оно новое или изменило время/день
+      if (row.kind === 'activity' && row.activity_id && row.hours && row.hours.length) {
+        const same = before && dateStr(before.day) === row.day && JSON.stringify(before.hours) === JSON.stringify(row.hours) && JSON.stringify(before.span_min || null) === JSON.stringify(row.span_min || null);
+        if (!same) claimers.push(row);
+      }
     }
+    const ids = claimers.map((x) => Number(x.id));
+    for (const cl of claimers) await claimTime(c, user.id, cl, ids); // записи одной пачки друг у друга время не отнимают
     return out;
   });
   return { events: saved };
