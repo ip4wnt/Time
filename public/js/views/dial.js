@@ -1,5 +1,6 @@
 // Циферблат дня по макету «выбор часов»: широкое кольцо из 24 часов (ноль вверху), внутри риски и подписи часов.
-// Шаг выбора — 15 минут (96 сегментов). Компонент рисует кольцо и принимает жесты;
+// Короткое нажатие выбирает целый час (ближайшую часовую ячейку); шаг 15 минут (96 сегментов) включается,
+// только если нажать и повести пальцем. Компонент рисует кольцо и принимает жесты;
 // состоянием выбора (начало, конец, форма внизу) управляет представление дня.
 import { quarterOwners, activity, isSleepEvent, darken, dotClock, spanLabel } from '../state.js';
 
@@ -34,7 +35,7 @@ export function selLabel(sel) {
 // Диапазон выбора в минутах [начало, конец] или null
 export function selSpan(sel) {
   if (!sel || sel.phase === 'none') return null;
-  if (sel.phase === 'start' || sel.phase === 'picking-start') return [sel.a * 15, sel.a * 15 + 15];
+  if (sel.phase === 'start' || sel.phase === 'picking-start') return [sel.a * 15, (sel.a + (sel.n || 1)) * 15];
   const lo = Math.min(sel.a, sel.b); const hi = Math.max(sel.a, sel.b);
   return [lo * 15, (hi + 1) * 15];
 }
@@ -125,7 +126,7 @@ export function createDial(opts) {
     frame.replaceChildren();
     if (!sel || sel.phase === 'none') return;
     let lo; let hi;
-    if (sel.phase === 'start' || sel.phase === 'picking-start') { lo = sel.a; hi = sel.a; } else { lo = Math.min(sel.a, sel.b); hi = Math.max(sel.a, sel.b); }
+    if (sel.phase === 'start' || sel.phase === 'picking-start') { lo = sel.a; hi = sel.a + (sel.n || 1) - 1; } else { lo = Math.min(sel.a, sel.b); hi = Math.max(sel.a, sel.b); }
     el('path', { d: sector(lo * SEG, (hi + 1) * SEG), fill: 'none', stroke: '#fff', 'stroke-width': 6, 'stroke-linejoin': 'miter' }, frame);
   }
   paintFrame(opts.sel);
@@ -139,36 +140,53 @@ export function createDial(opts) {
     return { dist: Math.hypot(dx, dy) / k, seg: Math.min(95, Math.floor(deg / SEG)) };
   };
   let gesture = null; // 'start' | 'end'
-  let lastSeg = -1;
+  let lastKey = '';
+  let down = null;    // { x, y } точка нажатия
+  let fine = false;   // true — шаг 15 минут (после движения пальцем)
+  let curSeg = 0;
+  const MOVE_PX = 8;  // сдвиг, после которого нажатие считается «ведением»
   svg.style.touchAction = 'none';
+  // выбор по текущему жесту: целый час (4 четверти) или одна четверть
+  function compute() {
+    const n = fine ? 1 : 4;
+    const s = fine ? curSeg : Math.floor(curSeg / 4) * 4;
+    if (gesture === 'start') return { phase: 'picking-start', a: s, n };
+    const base = opts.sel; const bn = base.n || 1;
+    return { phase: 'picking-end', a: Math.min(base.a, s), b: Math.max(base.a + bn - 1, s + n - 1) };
+  }
   svg.addEventListener('pointerdown', (e) => {
     if (e.button !== undefined && e.button > 0) return;
     const g = geom(e);
     // кольцо; всё остальное — «мимо»
     if (g.dist < R_IN - 4 || g.dist > R_OUT + 6) { opts.onOutside?.(); return; }
     gesture = opts.sel && opts.sel.phase === 'start' ? 'end' : 'start';
+    down = { x: e.clientX, y: e.clientY }; fine = false; curSeg = g.seg; lastKey = '';
     try { svg.setPointerCapture(e.pointerId); } catch { /* ignore */ }
-    apply(g.seg);
+    apply();
     e.preventDefault();
   });
   svg.addEventListener('pointermove', (e) => {
     if (!gesture) return;
+    if (!fine && Math.hypot(e.clientX - down.x, e.clientY - down.y) > MOVE_PX) fine = true;
     const g = geom(e);
     if (g.dist < 40) return; // у самого центра угол нестабилен
-    if (g.seg !== lastSeg) apply(g.seg);
+    curSeg = g.seg;
+    apply();
   });
-  function apply(seg) {
-    lastSeg = seg;
-    const tmp = gesture === 'start' ? { phase: 'picking-start', a: seg } : { phase: 'picking-end', a: opts.sel.a, b: seg };
+  function apply() {
+    const tmp = compute();
+    const key = JSON.stringify(tmp);
+    if (key === lastKey) return;
+    lastKey = key;
     paintFrame(tmp);
     opts.onPreview?.(tmp);
   }
   const end = (e) => {
     if (!gesture) return;
-    const kind = gesture; gesture = null;
-    const seg = lastSeg; lastSeg = -1;
-    if (e.type === 'pointercancel') { paintFrame(opts.sel); opts.onPreview?.(opts.sel); return; }
-    opts.onCommit?.(kind, seg);
+    const kind = gesture;
+    if (e.type === 'pointercancel') { gesture = null; lastKey = ''; paintFrame(opts.sel); opts.onPreview?.(opts.sel); return; }
+    const t = compute(); gesture = null; lastKey = '';
+    opts.onCommit?.(kind, kind === 'start' ? { phase: 'start', a: t.a, n: t.n } : { phase: 'range', a: t.a, b: t.b });
   };
   svg.addEventListener('pointerup', end);
   svg.addEventListener('pointercancel', end);
