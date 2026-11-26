@@ -10,6 +10,7 @@ const db = require('./db');
 const tx = (q, fn) => fn(q);
 const auth = require('./auth');
 const food = require('./food');
+const fin = require('./fin');
 const config = require('./config');
 const { HttpError, Router, sendJson, readBody, cookieHeader } = require('./http');
 
@@ -170,11 +171,11 @@ router.add('GET', '/api/counters/:id/stats', async ({ q, user, params }) => {
 });
 
 // ---------------- events ----------------
-const EVENT_COLS = 'id, kind, day, hours, span_min, days, position, activity_id, tag_id, text, mood, kcal, protein, fat, carbs, food_calc, counter_id, counter_value, done, done_at, planned, created_at, updated_at';
+const EVENT_COLS = 'id, kind, day, hours, span_min, days, position, activity_id, tag_id, text, mood, kcal, protein, fat, carbs, food_calc, counter_id, counter_value, money_node_id, money_amount, done, done_at, planned, created_at, updated_at';
 function fmtEvent(e) {
   e.day = dateStr(e.day);
   if (e.days) e.days = e.days.map(dateStr);
-  for (const k of ['kcal', 'protein', 'fat', 'carbs', 'counter_value']) if (e[k] != null) e[k] = Number(e[k]);
+  for (const k of ['kcal', 'protein', 'fat', 'carbs', 'counter_value', 'money_amount']) if (e[k] != null) e[k] = Number(e[k]);
   return e;
 }
 
@@ -210,7 +211,7 @@ router.add('GET', '/api/events', async ({ q, user, query }) => {
 function spanHours([a, b]) { const out = []; for (let h = Math.floor(a / 60); h <= Math.ceil(b / 60) - 1; h++) out.push(h); return out; }
 
 function validateEvent(e) {
-  const kinds = ['activity', 'task', 'food', 'thought', 'counter'];
+  const kinds = ['activity', 'task', 'food', 'thought', 'counter', 'money'];
   if (!kinds.includes(e.kind)) throw new HttpError(400, 'Неизвестный тип события');
   const out = { kind: e.kind, text: str(e.text, 20000), position: e.position != null ? int(e.position) : 0, span_min: null };
   if (e.kind === 'task') {
@@ -243,6 +244,9 @@ function validateEvent(e) {
   out.counter_id = e.kind === 'counter' && e.counter_id != null ? int(e.counter_id) : null;
   out.counter_value = e.kind === 'counter' && e.counter_value != null && e.counter_value !== '' ? Number(e.counter_value) : null;
   if (e.kind === 'counter' && (out.counter_id == null || out.counter_value == null || Number.isNaN(out.counter_value))) throw new HttpError(400, 'Для счётчика нужны счётчик и значение');
+  out.money_node_id = e.kind === 'money' && e.money_node_id != null && e.money_node_id !== '' ? int(e.money_node_id) : null;
+  out.money_amount = e.kind === 'money' && e.money_amount != null && e.money_amount !== '' ? Number(e.money_amount) : null;
+  if (e.kind === 'money' && (out.money_node_id == null || !(out.money_amount > 0))) throw new HttpError(400, 'Для денег нужны статья бюджета и сумма');
   out.done = !!e.done;
   out.planned = e.kind === 'activity' && !!e.planned;
   return out;
@@ -251,15 +255,16 @@ function validateEvent(e) {
 async function ownsRefs(c, userId, ev) {
   if (ev.activity_id != null) { const r = await c.query('SELECT 1 FROM activities WHERE id=$1 AND user_id=$2', [ev.activity_id, userId]); if (!r.rowCount) throw new HttpError(400, 'Занятие не найдено'); }
   if (ev.tag_id != null) { const r = await c.query('SELECT 1 FROM tags WHERE id=$1 AND user_id=$2', [ev.tag_id, userId]); if (!r.rowCount) throw new HttpError(400, 'Тег не найден'); }
+  if (ev.money_node_id != null) { const r = await c.query("SELECT 1 FROM fin_nodes WHERE id=$1 AND user_id=$2 AND type='item'", [ev.money_node_id, userId]); if (!r.rowCount) throw new HttpError(400, 'Статья бюджета не найдена'); }
   if (ev.counter_id != null) { const r = await c.query('SELECT 1 FROM counters WHERE id=$1 AND user_id=$2', [ev.counter_id, userId]); if (!r.rowCount) throw new HttpError(400, 'Счётчик не найден'); }
 }
 
-const INSERT_SQL = `INSERT INTO events(user_id, kind, day, hours, span_min, days, position, activity_id, tag_id, text, mood, kcal, protein, fat, carbs, food_calc, counter_id, counter_value, done, done_at, planned)
-  VALUES ($1,$2,$3,$4,$20,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18, CASE WHEN $18 THEN now() ELSE NULL END, $19) RETURNING ${EVENT_COLS}`;
+const INSERT_SQL = `INSERT INTO events(user_id, kind, day, hours, span_min, days, position, activity_id, tag_id, text, mood, kcal, protein, fat, carbs, food_calc, counter_id, counter_value, done, done_at, planned, money_node_id, money_amount)
+  VALUES ($1,$2,$3,$4,$20,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18, CASE WHEN $18 THEN now() ELSE NULL END, $19, $21, $22) RETURNING ${EVENT_COLS}`;
 const UPDATE_SQL = `UPDATE events SET kind=$3, day=$4, hours=$5, span_min=$21, days=$6, position=$7, activity_id=$8, tag_id=$9, text=$10, mood=$11, kcal=$12, protein=$13, fat=$14, carbs=$15, food_calc=$16, counter_id=$17, counter_value=$18,
-  done=$19, done_at = CASE WHEN $19 AND done_at IS NULL THEN now() WHEN NOT $19 THEN NULL ELSE done_at END, planned=$20, updated_at=now() WHERE id=$1 AND user_id=$2 RETURNING ${EVENT_COLS}`;
-function insertParams(userId, v) { return [userId, v.kind, v.day, v.hours, v.days, v.position, v.activity_id, v.tag_id, v.text, v.mood, v.kcal, v.protein, v.fat, v.carbs, v.food_calc, v.counter_id, v.counter_value, v.done, v.planned, v.span_min]; }
-function updateParams(id, userId, v) { return [id, userId, v.kind, v.day, v.hours, v.days, v.position, v.activity_id, v.tag_id, v.text, v.mood, v.kcal, v.protein, v.fat, v.carbs, v.food_calc, v.counter_id, v.counter_value, v.done, v.planned, v.span_min]; }
+  done=$19, done_at = CASE WHEN $19 AND done_at IS NULL THEN now() WHEN NOT $19 THEN NULL ELSE done_at END, planned=$20, money_node_id=$22, money_amount=$23, updated_at=now() WHERE id=$1 AND user_id=$2 RETURNING ${EVENT_COLS}`;
+function insertParams(userId, v) { return [userId, v.kind, v.day, v.hours, v.days, v.position, v.activity_id, v.tag_id, v.text, v.mood, v.kcal, v.protein, v.fat, v.carbs, v.food_calc, v.counter_id, v.counter_value, v.done, v.planned, v.span_min, v.money_node_id, v.money_amount]; }
+function updateParams(id, userId, v) { return [id, userId, v.kind, v.day, v.hours, v.days, v.position, v.activity_id, v.tag_id, v.text, v.mood, v.kcal, v.protein, v.fat, v.carbs, v.food_calc, v.counter_id, v.counter_value, v.done, v.planned, v.span_min, v.money_node_id, v.money_amount]; }
 
 // ---- пересечения занятий внутри дня ----
 // Новое (или сдвинутое) занятие забирает себе время: у ранее созданных занятий того же дня вырезается пересечение.
@@ -333,6 +338,7 @@ router.add('POST', '/api/events/batch', async ({ q, user, body }) => {
       } else r = await c.query(INSERT_SQL, insertParams(user.id, v));
       if (!r.rowCount) continue;
       const row = fmtEvent(r.rows[0]);
+      if (row.kind === 'money' || (before && before.kind === 'money')) await fin.syncMoney(c, user.id, row);
       out.push(row);
       // занятие «забирает» время, если оно новое или изменило время/день
       if (row.kind === 'activity' && row.activity_id && row.hours && row.hours.length) {
@@ -348,7 +354,7 @@ router.add('POST', '/api/events/batch', async ({ q, user, body }) => {
 });
 router.add('POST', '/api/events', async ({ q, user, body }) => {
   const v = validateEvent(body);
-  return tx(q, async (c) => { await ownsRefs(c, user.id, v); const r = await c.query(INSERT_SQL, insertParams(user.id, v)); return fmtEvent(r.rows[0]); });
+  return tx(q, async (c) => { await ownsRefs(c, user.id, v); const r = await c.query(INSERT_SQL, insertParams(user.id, v)); const row = fmtEvent(r.rows[0]); if (row.kind === 'money') await fin.syncMoney(c, user.id, row); return row; });
 });
 router.add('PUT', '/api/events/:id', async ({ q, user, body, params }) => {
   const id = int(params.id);
@@ -356,7 +362,7 @@ router.add('PUT', '/api/events/:id', async ({ q, user, body, params }) => {
   if (!cur.rowCount) throw new HttpError(404, 'Событие не найдено');
   const merged = { ...fmtEvent(cur.rows[0]), ...body };
   const v = validateEvent(merged);
-  return tx(q, async (c) => { await ownsRefs(c, user.id, v); const r = await c.query(UPDATE_SQL, updateParams(id, user.id, v)); return fmtEvent(r.rows[0]); });
+  return tx(q, async (c) => { await ownsRefs(c, user.id, v); const r = await c.query(UPDATE_SQL, updateParams(id, user.id, v)); const row = fmtEvent(r.rows[0]); if (row.kind === 'money' || cur.rows[0].kind === 'money') await fin.syncMoney(c, user.id, row); return row; });
 });
 router.add('DELETE', '/api/events/:id', async ({ q, user, params }) => {
   const r = await q.query('DELETE FROM events WHERE id=$1 AND user_id=$2 RETURNING id', [int(params.id), user.id]);
@@ -648,5 +654,7 @@ router.add('DELETE', '/api/admin/leads/:id', async ({ user, params }) => {
   await db.query('DELETE FROM leads WHERE id=$1', [int(params.id)]);
   return { ok: true };
 });
+
+fin.register(router, { int, str, isDate, tx });
 
 module.exports = { router, COOKIE };

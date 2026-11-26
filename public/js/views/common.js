@@ -22,7 +22,7 @@ export function activeFilters() { return CELL_ORDER.filter((f) => state.filters.
 export const ADD_KINDS = [
   { id: 'activity', icon: 'dots', title: 'занятие' },
   { id: 'task', icon: 'list', title: 'задача' },
-  { id: 'money', icon: 'ruble', title: 'деньги', disabled: true },
+  { id: 'money', icon: 'ruble', title: 'деньги' },
   { id: 'food', icon: 'apple', title: 'еда' },
   { id: 'counter', icon: 'timer', title: 'счетчик' },
   { id: 'thought', icon: 'cloud', title: 'мысли' },
@@ -37,7 +37,7 @@ export function secTitle(text, { collapsed = null, onToggle = null } = {}) {
 }
 
 // Блок «Добавить» под сеткой в режиме выбора часов
-const ADD_TITLE = { activity: 'Занятие', task: 'Задача', food: 'Еда', counter: 'Счетчик', thought: 'Мысли' };
+const ADD_TITLE = { activity: 'Занятие', task: 'Задача', money: 'Деньги', food: 'Еда', counter: 'Счетчик', thought: 'Мысли' };
 export function addBlock(onPick, active = null) {
   const el = h(`<div class="addblock"></div>`);
   el.appendChild(secTitle(ADD_TITLE[active] || 'Добавить'));

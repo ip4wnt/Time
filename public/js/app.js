@@ -14,6 +14,7 @@ import { renderDates } from './views/dates.js';
 import { renderThoughts } from './views/thoughts.js';
 import { renderMe } from './views/me.js';
 import { renderSearch } from './views/search.js';
+import { renderFin } from './views/finance.js';
 import { renderActivities } from './views/activities.js';
 
 const app = document.getElementById('app');
@@ -37,6 +38,7 @@ const ROUTES = {
   counters: () => renderCounters(),
   dates: () => renderDates(),
   thoughts: () => renderThoughts(),
+  fin: (p) => renderFin(p),
   me: () => renderMe(),
   search: (p, q) => renderSearch(q),
   settings: () => renderActivities(),
@@ -75,7 +77,7 @@ function openMenu() {
       <a class="mi" href="#/notes">заметки ${I.book}</a>
       <a class="mi" href="#/month?filter=food">еда ${I.apple}</a>
       <a class="mi" href="#/month?filter=task">задачи ${I.list}</a>
-      <span class="mi off">деньги ${I.ruble}</span>
+      <a class="mi" href="#/fin">деньги ${I.ruble}</a>
       <a class="mi" href="#/counters">счетчики ${I.timer}</a>
       <a class="mi" href="#/dates">важные даты ${I.star}</a>
       <a class="mi" href="#/thoughts">мысли ${I.cloud}</a>

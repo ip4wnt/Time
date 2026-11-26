@@ -294,10 +294,9 @@ export async function renderDay(day, query = {}) {
       events: evs, sel: dsel, nowMin: isToday ? new Date().getHours() * 60 + new Date().getMinutes() : null,
       marks: dialMarks(),
       onPreview: (tmp) => { if (tmp.phase === 'none') { selMode = false; drawHeader(); return; } const t = hdrHost.querySelector('.sel-time'); if (t) t.textContent = selLabel(tmp); if (!selMode) { selMode = true; drawHeader(); const t2 = hdrHost.querySelector('.sel-time'); if (t2) t2.textContent = selLabel(tmp); } },
-      onCommit: (kind, seg) => {
+      onCommit: (kind, sel) => {
         selMode = true; kbCursor = null; kbAnchor = null;
-        if (kind === 'start') dsel = { phase: 'start', a: seg };
-        else dsel = { phase: 'range', a: dsel.a, b: seg };
+        dsel = sel; // короткое нажатие даёт целый час, ведение пальцем — шаг 15 минут
         draw();
       },
       onOutside: () => { if (selMode) exitSel(); },
@@ -344,6 +343,7 @@ export async function renderDay(day, query = {}) {
   function labelFor(e) {
     if (e.kind === 'activity') { return activityLabel(e); }
     if (e.kind === 'counter') { const c = counter(e.counter_id); return `${c ? c.name : 'счётчик'}: ${e.counter_value}${c && c.unit ? ` ${c.unit}` : ''}`; }
+    if (e.kind === 'money') return `${e.money_amount != null ? Math.round(e.money_amount).toLocaleString('ru-RU') + ' ₽' : 'деньги'}${(e.text || '').trim() ? ` — ${(e.text || '').trim()}` : ''}`;
     if (e.kind === 'food') return (e.text || '').trim() + (e.kcal != null ? ` — ${Math.round(e.kcal)} ккал` : '');
     return (e.text || '').trim();
   }

@@ -10,7 +10,7 @@ import { selHeader, secTitle, daysPicker, hoursPicker } from './common.js';
 
 const KIND_TITLE = { activity: 'занятие', food: 'еду', task: 'задачу', thought: 'мысль', counter: 'счётчик' };
 // названия блоков в том же порядке, что и фильтры
-const SEC_TITLE = { activity: 'Занятие', task: 'Задача', food: 'Еда', counter: 'Счетчик', thought: 'Мысли' };
+const SEC_TITLE = { activity: 'Занятие', task: 'Задача', money: 'Деньги', food: 'Еда', counter: 'Счетчик', thought: 'Мысли' };
 const PLACEHOLDER = { activity: 'чем занимались?', task: 'что за задача' };
 
 // opts.host — встроенный режим (внутри представления дня): без шапки, переходов и клавиатуры экрана.
@@ -59,7 +59,7 @@ export async function renderAdd(q, opts = {}) {
   else if (!editId && kind === 'activity' && !(q.existing && span)) entries.unshift(blank('activity')); // новый выбор времени всегда начинается с новой записи; прежние записи этих часов остаются ниже
 
   function blank(k) {
-    return { id: null, kind: k, day, hours: [...selHours], span_min: k !== 'task' && span ? [...span] : null, days: [...selDays], activity_id: null, tag_id: null, text: '', mood: 'neutral', kcal: null, protein: null, fat: null, carbs: null, food_calc: null, counter_id: state.counters[0]?.id || null, counter_value: null, done: false, planned: false, files: [], pending: [] };
+    return { id: null, kind: k, day, hours: [...selHours], span_min: k !== 'task' && span ? [...span] : null, days: [...selDays], activity_id: null, tag_id: null, text: '', mood: 'neutral', kcal: null, protein: null, fat: null, carbs: null, food_calc: null, counter_id: state.counters[0]?.id || null, counter_value: null, money_node_id: null, money_amount: null, done: false, planned: false, files: [], pending: [] };
   }
   function fromEvent(e) { return { ...e, hours: e.hours || [], days: e.days || [], files: e.files || [], pending: [], text: e.text || '' }; }
 
@@ -175,6 +175,7 @@ export async function renderAdd(q, opts = {}) {
     else if (en.kind === 'food') foodBody(en, body);
     else if (en.kind === 'thought') thoughtBody(en, body);
     else if (en.kind === 'counter') counterBody(en, body);
+    else if (en.kind === 'money') moneyBody(en, body);
     else if (en.kind === 'task') taskBody(en, body);
     drawFiles(en, el);
     return el;
@@ -372,6 +373,41 @@ export async function renderAdd(q, opts = {}) {
     body.appendChild(textarea(en, 'комментарий (необязательно)', 'short'));
   }
 
+  // ---- деньги: расход или доход по статье бюджета (отражается в разделе «деньги»)
+  let finPicker = null;
+  async function moneyBody(en, body) {
+    body.innerHTML = '';
+    const year = Number((en.day || day).slice(0, 4));
+    if (!finPicker) {
+      try { finPicker = (await get(`/api/fin/picker?year=${year}`)).budgets; } catch (e) { toast(e.message); finPicker = []; }
+    }
+    const withItems = finPicker.filter((b) => b.items.length);
+    if (!withItems.length) {
+      body.appendChild(h(`<p class="p">в бюджете пока нет статей — <a href="#/fin/year/${year}" style="color:#DEDEDE;text-decoration:underline">завести</a></p>`));
+      return;
+    }
+    // бюджет, в котором лежит выбранная статья (по умолчанию — бюджет года)
+    let bud = withItems.find((b) => b.items.some((it) => it.id === en.money_node_id)) || withItems.find((b) => b.kind === 'year') || withItems[0];
+    const label = (b) => (b.kind === 'year' ? `бюджет ${b.year}` : b.name);
+    const draw = () => {
+      body.innerHTML = '';
+      if (withItems.length > 1) {
+        const sb = h(`<select class="field" style="margin-bottom:1rem">${withItems.map((b) => `<option value="${b.id}" ${b.id === bud.id ? 'selected' : ''}>${esc(label(b))}</option>`).join('')}</select>`);
+        sb.onchange = (e) => { bud = withItems.find((b) => b.id === Number(e.target.value)); en.money_node_id = null; draw(); };
+        body.appendChild(sb);
+      }
+      const opt = (it) => `<option value="${it.id}" ${en.money_node_id === it.id ? 'selected' : ''}>${esc((it.path ? `${it.path} / ` : '') + it.title)}</option>`;
+      const exp = bud.items.filter((i) => i.side === 'expense'); const inc = bud.items.filter((i) => i.side === 'income');
+      const sel = h(`<select class="field" style="margin-bottom:1rem"><option value="">статья…</option>${exp.length ? `<optgroup label="расходы">${exp.map(opt).join('')}</optgroup>` : ''}${inc.length ? `<optgroup label="доходы">${inc.map(opt).join('')}</optgroup>` : ''}</select>`);
+      sel.onchange = (e) => { en.money_node_id = e.target.value ? Number(e.target.value) : null; };
+      const amt = h(`<input class="field" inputmode="decimal" placeholder="сумма" value="${en.money_amount ?? ''}">`);
+      amt.oninput = (e) => { const v = parseFloat(e.target.value.replace(/\s/g, '').replace(',', '.')); en.money_amount = Number.isFinite(v) ? v : null; };
+      body.append(sel, amt);
+      body.appendChild(textarea(en, 'комментарий (необязательно)', 'short'));
+    };
+    draw();
+  }
+
   // ---- задача (теперь тоже с цветом и тегами)
   function taskBody(en, body) {
     const redraw = () => taskBody(en, body);
@@ -428,8 +464,9 @@ export async function renderAdd(q, opts = {}) {
       if (en.kind === 'thought') base.mood = en.mood;
       if (en.kind === 'food') Object.assign(base, { kcal: en.kcal, protein: en.protein, fat: en.fat, carbs: en.carbs, food_calc: en.food_calc });
       if (en.kind === 'counter') Object.assign(base, { counter_id: en.counter_id, counter_value: en.counter_value });
+      if (en.kind === 'money') Object.assign(base, { money_node_id: en.money_node_id, money_amount: en.money_amount });
       // пустые новые записи не сохраняем
-      const empty = !en.id && !en.text.trim() && !en.activity_id && !(en.kind === 'counter' && en.counter_value != null) && !en.pending.length && !(en.kind === 'food' && en.kcal != null);
+      const empty = !en.id && !en.text.trim() && !en.activity_id && !(en.kind === 'counter' && en.counter_value != null) && !(en.kind === 'money' && en.money_amount != null) && !en.pending.length && !(en.kind === 'food' && en.kcal != null);
       if (!empty) { upsert.push(base); upsertEntries.push(en); }
     });
     if (!upsert.length && !removed.length) { leave(false); return; }
