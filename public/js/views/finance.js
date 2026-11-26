@@ -99,8 +99,19 @@ export async function renderFin(parts) {
     page.appendChild(part('income'));
     const bal = sideTotal('income') - sideTotal('expense');
     page.appendChild(h(`<section class="fin-part fin-balance"><div class="fin-big"><span class="fin-big-t">Баланс</span><span class="fin-sum">${fmtK(bal)}</span></div></section>`));
+    if (isYear) {
+      const c = h('<div class="fin-carry"><button>перенести весь бюджет в новый год</button></div>');
+      c.firstElementChild.onclick = carry;
+      page.appendChild(c);
+    }
     renderPanel();
     window.scrollTo(0, scroll);
+  }
+
+  async function carry() {
+    const to = D.budget.year + 1;
+    if (!(await confirm(`Перенести плановые суммы, разделы, подразделы и статьи в ${to} год? Исполнение не переносится.`, 'перенести'))) return;
+    try { const r = await post('/api/fin/carry', { budget_id: D.budget.id }); toast(`Перенесено в ${r.year} год`); location.hash = `#/fin/year/${r.year}`; } catch (e) { toast(e.message); }
   }
 
   function part(side) {
@@ -120,6 +131,7 @@ export async function renderFin(parts) {
     box.appendChild(emptyRow(side, parent, !list.length && !parentNode));
     for (const d of divs) box.appendChild(dividerBlock(d));
     for (const s of secs) box.appendChild(sectionBlock(s));
+    if (!parent) { const f = box.querySelector(':scope > .fin-sec'); if (f) f.classList.add('first'); }
   }
 
   function emptyRow(side, parent, hint) {

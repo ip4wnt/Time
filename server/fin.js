@@ -97,6 +97,32 @@ function register(router, { int, str, isDate, tx }) {
     if (!PARENT_TYPES[type].includes(p.type)) throw new HttpError(400, 'Сюда это перенести нельзя');
   }
 
+  // перенос бюджета года на следующий год: разделы, подразделы, статьи и плановые суммы; исполнение не переносится
+  router.add('POST', '/api/fin/carry', async ({ q, user, body }) => {
+    const src = await own(q, user, int(body.budget_id));
+    if (src.kind !== 'year') throw new HttpError(400, 'Переносить можно только бюджет года');
+    const year = src.year + 1;
+    if (year > 2200) throw new HttpError(400, 'Неверный год');
+    return tx(q, async (c) => {
+      let dst = (await c.query("SELECT id FROM fin_budgets WHERE user_id=$1 AND kind='year' AND year=$2", [user.id, year])).rows[0];
+      if (!dst) dst = (await c.query("INSERT INTO fin_budgets(user_id, kind, year, name) VALUES ($1,'year',$2,$3) RETURNING id", [user.id, year, String(year)])).rows[0];
+      const has = await c.query('SELECT 1 FROM fin_nodes WHERE budget_id=$1 AND user_id=$2 LIMIT 1', [dst.id, user.id]);
+      if (has.rowCount) throw new HttpError(409, `В бюджете ${year} года уже есть записи`);
+      const all = (await c.query('SELECT id, side, parent_id, type, title, plan, position, collapsed FROM fin_nodes WHERE budget_id=$1 AND user_id=$2 ORDER BY position, id', [src.id, user.id])).rows;
+      const map = new Map();
+      const copy = async (parentOld) => {
+        for (const n of all.filter((x) => (x.parent_id ?? null) === parentOld)) {
+          const r = await c.query('INSERT INTO fin_nodes(user_id, budget_id, side, parent_id, type, title, plan, position, collapsed) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
+            [user.id, dst.id, n.side, parentOld === null ? null : map.get(parentOld), n.type, n.title, n.plan, n.position, n.collapsed]);
+          map.set(n.id, r.rows[0].id);
+          await copy(n.id);
+        }
+      };
+      await copy(null);
+      return { year, budget_id: dst.id, copied: map.size };
+    });
+  });
+
   router.add('POST', '/api/fin/nodes', async ({ q, user, body }) => {
     const b = await own(q, user, int(body.budget_id));
     const type = body.type;
