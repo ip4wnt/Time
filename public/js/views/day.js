@@ -69,6 +69,11 @@ export async function renderDay(day, query = {}) {
     const sp = dial ? selSpan(dsel) : null;
     const q = addKind === 'task' ? { days: day, hours: hrs, kind: 'task' } : { day, hours: hrs, kind: addKind };
     if (sp && addKind !== 'task') q.span = sp.join('-');
+    if (dial && dsel.phase === 'start' && addKind !== 'task') {
+      q.start = '1'; // конец диапазона ещё не выбран
+      // начало попало в уже созданное занятие: сначала правка этого занятия, а не создание нового
+      if (quarterOwners(evs)[dsel.a]) q.existing = '1';
+    }
     const fresh = h('<div></div>');
     const c = await renderAdd(q, {
       host: fresh,
@@ -122,7 +127,7 @@ export async function renderDay(day, query = {}) {
     if (dial) { const sp = selSpan(dsel); return sp ? spanHours(sp[0], sp[1]) : []; }
     return [...state.selection].sort((a, b) => a - b);
   }
-  const selKey = () => `${addKind}|${selectedHours().join(',')}|${dial ? (selSpan(dsel) || []).join('-') : ''}`;
+  const selKey = () => `${addKind}|${selectedHours().join(',')}|${dial ? `${(selSpan(dsel) || []).join('-')}|${dsel.phase}` : ''}`;
 
   function exitSel() { selMode = false; kbCursor = null; kbAnchor = null; state.selection.clear(); dsel = { phase: 'none' }; draw(); }
 
@@ -145,6 +150,7 @@ export async function renderDay(day, query = {}) {
 
   function draw() {
     document.body.classList.toggle('bg-hours', selMode);
+    document.body.classList.toggle('dial-sel', dial && selMode);
     document.body.classList.toggle('bg-day', !selMode);
     drawHeader();
     page.innerHTML = '';
@@ -186,7 +192,7 @@ export async function renderDay(day, query = {}) {
         addKind = kind; embedKey = selKey(); mountEmbed(false); draw();
       }, addKind));
       const key = selKey();
-      if (key !== embedKey) { const same = embedKey.split('|')[0] === addKind; embedKey = key; mountEmbed(same); }
+      if (key !== embedKey) { const same = embedKey.split('|')[0] === addKind && embedKey.split('|')[3] === key.split('|')[3]; embedKey = key; mountEmbed(same); }
       colR.appendChild(embedHost);
       return;
     }
@@ -268,10 +274,9 @@ export async function renderDay(day, query = {}) {
     return out.map((m) => { const n = seen[m.hour] || 0; seen[m.hour] = n + 1; return { ...m, hour: m.hour + n * 0.18 - 0.0 }; });
   }
   function buildDial() {
-    const filled = quarterOwners(evs).filter(Boolean).length / 4;
     const d = createDial({
       events: evs, sel: dsel, nowMin: isToday ? new Date().getHours() * 60 + new Date().getMinutes() : null,
-      marks: dialMarks(), hasRecords: filled > 0, filledHours: filled,
+      marks: dialMarks(),
       onPreview: (tmp) => { if (tmp.phase === 'none') { selMode = false; drawHeader(); return; } const t = hdrHost.querySelector('.sel-time'); if (t) t.textContent = selLabel(tmp); if (!selMode) { selMode = true; drawHeader(); const t2 = hdrHost.querySelector('.sel-time'); if (t2) t2.textContent = selLabel(tmp); } },
       onCommit: (kind, seg) => {
         selMode = true;
@@ -398,5 +403,5 @@ export async function renderDay(day, query = {}) {
   }
 
   draw();
-  return () => { window.removeEventListener('keydown', onKey); teardownEmbed(); document.querySelectorAll('.selbar').forEach((b) => b.remove()); document.body.classList.remove('bg-day', 'bg-hours'); };
+  return () => { window.removeEventListener('keydown', onKey); teardownEmbed(); document.querySelectorAll('.selbar').forEach((b) => b.remove()); document.body.classList.remove('bg-day', 'bg-hours', 'dial-sel'); };
 }

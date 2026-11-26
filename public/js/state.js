@@ -177,7 +177,9 @@ export function eventSegments(e) {
 export function overlapsSpan(e, s, f) { return eventSegments(e).some(([a, b]) => a < f && b > s); }
 export function spanHours(s, f) { const out = []; for (let h = Math.floor(s / 60); h <= Math.ceil(f / 60) - 1; h++) out.push(h); return out; }
 export const clock = (m) => `${Math.floor(m / 60)}:${pad(m % 60)}`;
-export function spanLabel(s, f) { return `${clock(s)}\u2013${f === 1440 ? '24:00' : clock(f)}`; }
+// «6.45» — формат экранов добавления: часы и минуты через точку, минуты без ведущего нуля («6.0», «9.45»)
+export const dotClock = (m) => `${Math.floor(m / 60)}.${m % 60}`;
+export function spanLabel(s, f) { return `${dotClock(s)}-${dotClock(f)}`; }
 // подпись времени записи: «6:45–7:15» для записей циферблата, иначе «19-21»
 export function eventTimeLabel(e) {
   if (Array.isArray(e.span_min) && e.span_min.length === 2) return spanLabel(e.span_min[0], e.span_min[1]);
