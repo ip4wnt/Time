@@ -1,7 +1,7 @@
 // Экран «месяц»: сетка 7×6, крошки-навигация, фильтры-наложения, блочная сводка, инфографика.
 import { I, KIND_ICON, MOOD_ICON } from '../icons.js';
 import {
-  state, monthGrid, todayStr, ymOf, loadMonth, loadDates, eventsOfDay, hourMap,
+  state, monthGrid, todayStr, ymOf, loadMonth, loadDates, eventsOfDay, hourMap, dayHourCounts,
   dominantActivity, dayKcal, dayCounterValue, topCounter, isImportant, isSleepEvent,
   activity, tag, counter, esc, rangesLabel, MOOD_COLOR, MONTHS_FULL, WEEKDAYS, invalidateEvents, kcalNorm, grad, plannedBg, activityLabel, dayPlanned,
 } from '../state.js';
@@ -136,7 +136,7 @@ export async function renderMonth(ym, query = {}) {
     const counts = new Map(); let total = 0;
     for (const g of grid) {
       if (!g.inMonth) continue;
-      for (const slot of hourMap(perDay.get(g.date))) { const k = hourKey(slot); counts.set(k, (counts.get(k) || 0) + 1); total++; }
+      dayHourCounts(perDay.get(g.date), counts); total += 24;
     }
     colR.appendChild(hourChart(counts, total, true));
   }

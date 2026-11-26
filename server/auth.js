@@ -151,8 +151,8 @@ async function createUser(loginRaw, password) {
   if (exists.rowCount) throw new HttpError(409, 'Этот логин уже занят');
   // служебная транзакция: пользователя ещё нет, поэтому заготовки создаём в обход RLS
   return db.txAdmin(async (c) => {
-    const u = await c.query('INSERT INTO users(login, login_norm, password_hash) VALUES ($1,$2,$3) RETURNING id',
-      [String(loginRaw).trim(), norm, hashPassword(password)]);
+    const u = await c.query('INSERT INTO users(login, login_norm, password_hash, settings) VALUES ($1,$2,$3,$4::jsonb) RETURNING id',
+      [String(loginRaw).trim(), norm, hashPassword(password), JSON.stringify({ day_view: 'dial' })]); // новым пользователям — циферблат
     const id = u.rows[0].id;
     await seedDefaults(c, id);
     return id;

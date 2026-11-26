@@ -1,6 +1,6 @@
 // Страница «профиль»: пароль, норма калорий, сессии.
 import { get, put, post, setToken } from '../api.js';
-import { state, esc, kcalNorm } from '../state.js';
+import { state, esc, kcalNorm, dayViewMode } from '../state.js';
 import { h, header, toast, confirm, dialog } from '../ui.js';
 
 export async function renderMe() {
@@ -34,11 +34,15 @@ export async function renderMe() {
 
   // --- настройки
   page.appendChild(h('<h2 class="h">настройки</h2>'));
-  const sf = h(`<div class="form"><label>норма калорий в день<input class="field" type="number" data-f="kcal" value="${kcalNorm()}" min="500" max="10000"></label>
+  const sf = h(`<div class="form"><label>отображение дня<select class="field" data-f="dayview">
+      <option value="grid" ${dayViewMode() === 'grid' ? 'selected' : ''}>каждый час как отдельный квадрат</option>
+      <option value="dial" ${dayViewMode() === 'dial' ? 'selected' : ''}>циферблат с шагом в 15 минут</option></select></label>
+    <label>норма калорий в день<input class="field" type="number" data-f="kcal" value="${kcalNorm()}" min="500" max="10000"></label>
     <div class="row" style="margin-top:.6rem"><button class="btn small" data-act="saves">сохранить настройки</button></div></div>`);
   sf.querySelector('[data-act=saves]').onclick = async () => {
     const kcal = Number(sf.querySelector('[data-f=kcal]').value) || 2000;
-    try { await put('/api/me/settings', { settings: { kcal_norm: kcal } }); state.user.settings = { ...(state.user.settings || {}), kcal_norm: kcal }; toast('сохранено'); } catch (e) { toast(e.message); }
+    const day_view = sf.querySelector('[data-f=dayview]').value === 'dial' ? 'dial' : 'grid';
+    try { await put('/api/me/settings', { settings: { kcal_norm: kcal, day_view } }); state.user.settings = { ...(state.user.settings || {}), kcal_norm: kcal, day_view }; toast('сохранено'); } catch (e) { toast(e.message); }
   };
   page.appendChild(sf);
 

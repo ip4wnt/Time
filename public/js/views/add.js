@@ -3,7 +3,7 @@ import { I, KIND_ICON, KIND_LABEL, MOOD_ICON } from '../icons.js';
 import { get, post, put, del, upload, fileUrl } from '../api.js';
 import {
   state, loadDay, loadMonth, ymOf, hoursLabel, hoursRange, humanDate, dotDate, rangesLabel, activeActivities, activity, tag, esc, saveBatch,
-  fmtSize, isLight, grad, MOOD_COLOR, todayStr, invalidateEvents, MONTHS_SHORT, parseDate,
+  fmtSize, isLight, grad, MOOD_COLOR, todayStr, invalidateEvents, MONTHS_SHORT, parseDate, overlapsSpan, spanHours, spanLabel,
 } from '../state.js';
 import { h, header, toast, dialog, prompt, confirm } from '../ui.js';
 import { selHeader, secTitle, daysPicker, hoursPicker } from './common.js';
@@ -24,6 +24,8 @@ export async function renderAdd(q, opts = {}) {
   let day = q.day || (q.days ? q.days.split(',')[0] : todayStr());
   const hours = q.hours ? q.hours.split(',').map(Number).filter((n) => n >= 0 && n < 24) : [];
   const days = q.days ? q.days.split(',').filter(Boolean) : [];
+  // точный диапазон циферблата «начало-конец» в минутах
+  const span = q.span && /^\d+-\d+$/.test(q.span) ? q.span.split('-').map(Number) : null;
   const editId = q.edit ? Number(q.edit) : null;
   let kind = q.kind || 'activity';
 
@@ -44,7 +46,8 @@ export async function renderAdd(q, opts = {}) {
     }
   } else if (!isTaskSel && hours.length) {
     const set = new Set(hours);
-    for (const e of dayEvents) if (e.kind !== 'task' && e.hours.some((x) => set.has(x))) entries.push(fromEvent(e));
+    // на циферблате показываем записи, пересекающиеся с выбранным диапазоном по минутам
+    for (const e of dayEvents) if (e.kind !== 'task' && (span ? overlapsSpan(e, span[0], span[1]) : e.hours.some((x) => set.has(x)))) entries.push(fromEvent(e));
   }
   let selHours = hours.length ? hours : (entries[0]?.hours || []);
   // у записей-не-задач поле days пустое, поэтому нужен именно непустой список
@@ -53,10 +56,10 @@ export async function renderAdd(q, opts = {}) {
   let focusNew = false;
   if (!entries.length || (!editId && kind !== 'activity' && kind !== 'task')) { entries.push(blank(kind)); focusNew = entries.length > 1; }
   // выбрано «занятие» для часов, где пока только счетчик, еда или мысль: даем заполнить занятие первым блоком
-  else if (!editId && kind === 'activity' && !entries.some((e) => e.kind === 'activity')) entries.unshift(blank('activity'));
+  else if (!editId && kind === 'activity') entries.unshift(blank('activity')); // новый выбор времени всегда начинается с новой записи; прежние записи этих часов остаются ниже
 
   function blank(k) {
-    return { id: null, kind: k, day, hours: [...selHours], days: [...selDays], activity_id: null, tag_id: null, text: '', mood: 'neutral', kcal: null, protein: null, fat: null, carbs: null, food_calc: null, counter_id: state.counters[0]?.id || null, counter_value: null, done: false, planned: false, files: [], pending: [] };
+    return { id: null, kind: k, day, hours: [...selHours], span_min: k !== 'task' && span ? [...span] : null, days: [...selDays], activity_id: null, tag_id: null, text: '', mood: 'neutral', kcal: null, protein: null, fat: null, carbs: null, food_calc: null, counter_id: state.counters[0]?.id || null, counter_value: null, done: false, planned: false, files: [], pending: [] };
   }
   function fromEvent(e) { return { ...e, hours: e.hours || [], days: e.days || [], files: e.files || [], pending: [], text: e.text || '' }; }
 
@@ -96,7 +99,7 @@ export async function renderAdd(q, opts = {}) {
       bD.onclick = () => openPop(bD, () => daysPicker(selDays, (ds) => { setDays(ds); }));
       mid.appendChild(bD);
     } else {
-      const bH = h(`<button data-act="hours">${hoursRange(selHours) || 'часы'}</button>`);
+      const bH = h(`<button data-act="hours">${span ? spanLabel(span[0], span[1]) : (hoursRange(selHours) || 'часы')}</button>`);
       bH.onclick = () => openPop(bH, () => hoursPicker(selHours, (hs) => { setHours(hs); }));
       const bD = h(`<button data-act="date">${dotDate(day)}</button>`);
       bD.onclick = () => openPop(bD, () => daysPicker([day], (ds) => { setDays(ds); }));
@@ -108,7 +111,7 @@ export async function renderAdd(q, opts = {}) {
   function setHours(hs) {
     if (!hs.length) return;
     selHours = hs;
-    for (const en of entries) en.hours = [...hs];
+    for (const en of entries) { en.hours = [...hs]; en.span_min = null; } // выбор часов вручную возвращает запись к целым часам
     drawHeader(); draw();
   }
   function setDays(ds) {
@@ -419,7 +422,7 @@ export async function renderAdd(q, opts = {}) {
         // задачу, добавленную к конкретному часу, привязываем к этому часу
         if (base.days.length === 1) base.hours = en.hours.length ? en.hours : selHours;
       }
-      else { base.day = en.day || day; base.hours = en.hours.length ? en.hours : selHours; }
+      else { base.day = en.day || day; base.hours = en.hours.length ? en.hours : selHours; base.span_min = en.span_min || null; }
       if (en.kind === 'thought') base.mood = en.mood;
       if (en.kind === 'food') Object.assign(base, { kcal: en.kcal, protein: en.protein, fat: en.fat, carbs: en.carbs, food_calc: en.food_calc });
       if (en.kind === 'counter') Object.assign(base, { counter_id: en.counter_id, counter_value: en.counter_value });

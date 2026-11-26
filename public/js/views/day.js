@@ -3,12 +3,14 @@ import { I, KIND_ICON, MOOD_ICON } from '../icons.js';
 import {
   state, dayLabel, dotDate, todayStr, ymOf, loadDay, loadDates, hourMap, foodHeat, dayKcal, topCounter,
   isImportant, isSleepEvent, activity, tag, counter, MOOD_COLOR, hoursLabel, hoursRange, kcalNorm, grad, plannedBg, activityLabel, invalidateEvents,
+  dayViewMode, quarterOwners, spanHours, eventSegments, eventTimeLabel, dayHourCounts, fmtHours,
 } from '../state.js';
+import { createDial, selLabel, selSpan } from './dial.js';
 import { h, toast } from '../ui.js';
 import { put } from '../api.js';
 import { renderAdd } from './add.js';
 import {
-  calHeader, dayPicker, filtersBar, activeFilters, cellRows, hourChart, hourKey, periodNote, sumLine, sumSep, hiddenInSummary,
+  calHeader, dayPicker, filtersBar, activeFilters, cellRows, hourChart, periodNote, sumLine, sumSep, hiddenInSummary,
   addBlock, selHeader, ROW_NEUTRAL,
 } from './common.js';
 
@@ -25,6 +27,9 @@ export async function renderDay(day, query = {}) {
   app.appendChild(page);
   // режим выбора часов: остается только сетка и блок «добавить»
   let selMode = false;
+  // циферблат: состояние выбора. none → start (начало зафиксировано) → range (диапазон выбран)
+  const dial = dayViewMode() === 'dial';
+  let dsel = { phase: 'none' };
   // на десктопе слева часы с фильтрами, справа сводка дня
   let colL = null; let colR = null;
 
@@ -60,8 +65,10 @@ export async function renderDay(day, query = {}) {
   }
   async function mountEmbed(keepDraft) {
     const token = ++mountToken;
-        const hrs = selectedHours().join(',');
+    const hrs = selectedHours().join(',');
+    const sp = dial ? selSpan(dsel) : null;
     const q = addKind === 'task' ? { days: day, hours: hrs, kind: 'task' } : { day, hours: hrs, kind: addKind };
+    if (sp && addKind !== 'task') q.span = sp.join('-');
     const fresh = h('<div></div>');
     const c = await renderAdd(q, {
       host: fresh,
@@ -90,7 +97,7 @@ export async function renderDay(day, query = {}) {
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
     if (state.menuOpen || document.querySelector('.dlg-back')) return;
     if (embedCleanup?.isEngaged?.()) return; // клавиатура у формы справа
-    if (e.key in ARROW) {
+    if (!dial && e.key in ARROW) {
       e.preventDefault();
       if (kbCursor === null) {
         if (selMode && state.selection.size) { kbCursor = Math.min(...state.selection); kbAnchor = kbCursor; }
@@ -111,15 +118,19 @@ export async function renderDay(day, query = {}) {
   }
   window.addEventListener('keydown', onKey);
 
-  function selectedHours() { return [...state.selection].sort((a, b) => a - b); }
+  function selectedHours() {
+    if (dial) { const sp = selSpan(dsel); return sp ? spanHours(sp[0], sp[1]) : []; }
+    return [...state.selection].sort((a, b) => a - b);
+  }
+  const selKey = () => `${addKind}|${selectedHours().join(',')}|${dial ? (selSpan(dsel) || []).join('-') : ''}`;
 
-  function exitSel() { selMode = false; kbCursor = null; kbAnchor = null; state.selection.clear(); draw(); }
+  function exitSel() { selMode = false; kbCursor = null; kbAnchor = null; state.selection.clear(); dsel = { phase: 'none' }; draw(); }
 
   function drawHeader() {
     hdrHost.innerHTML = '';
     if (selMode) {
       hdrHost.appendChild(selHeader({
-        mid: `<span>${hoursRange(selectedHours())}</span><span class="sep">/</span><span>${dotDate(day)}</span>`,
+        mid: `<span class="sel-time">${dial ? selLabel(dsel) : hoursRange(selectedHours())}</span><span class="sep">/</span><span>${dotDate(day)}</span>`,
         onClose: exitSel,
       }));
       return;
@@ -141,13 +152,21 @@ export async function renderDay(day, query = {}) {
     colL = h('<div class="cal-l"></div>'); colR = h('<div class="cal-r"></div>');
     cols.append(colL, colR); page.appendChild(cols);
     const g = h('<div class="grid grid-day"></div>');
+    const owners = quarterOwners(evs);
     for (let hr = 0; hr < 24; hr++) {
       const slot = hm[hr];
       const bottom = `<span class="cell-num">${hr}</span>${imp && hr === 0 ? `<span class="cell-star">${I.star}</span>` : ''}`;
       const { rows, html } = cellRows(overlays(slot, hr), bottom);
       const cell = h(`<button class="cell ${isToday && hr === nowHour ? 'today' : ''} ${state.selection.has(hr) ? 'selected' : ''}" style="--rows:${rows}" data-hour="${hr}">${html}</button>`);
+      const qs = owners.slice(hr * 4, hr * 4 + 4);
       const act = slot.all.find((e) => e.kind === 'activity');
-      if (act && isSleepEvent(act)) cell.classList.add('sleep');
+      if (qs.some((o) => o !== qs[0])) {
+        // час занят частично или разными занятиями: закрашиваем по четвертям сверху вниз
+        const col = (o) => { if (!o) return 'transparent'; if (isSleepEvent(o)) return '#2a262a'; const a = activity(o.activity_id); return a ? a.color : 'transparent'; };
+        const stops = qs.map((o, i) => `${col(o)} ${i * 25}% ${(i + 1) * 25}%`).join(', ');
+        cell.style.background = `linear-gradient(180deg, ${stops})`;
+        cell.classList.add('colored', 'partial');
+      } else if (act && isSleepEvent(act)) cell.classList.add('sleep');
       else if (act) { const a = activity(act.activity_id); if (a) { cell.style.background = act.planned ? plannedBg(a.color, 5) : grad(a.color); cell.classList.add('colored'); } }
       if (slot.extras.length) cell.classList.add('multi');
       // с клавиатуры (Enter/пробел) час переключается обычным нажатием; мышь и палец обрабатывает сетка целиком
@@ -159,14 +178,14 @@ export async function renderDay(day, query = {}) {
       };
       g.appendChild(cell);
     }
-    attachSweep(g);
-    colL.appendChild(g);
+    if (dial) colL.appendChild(buildDial());
+    else { attachSweep(g); colL.appendChild(g); }
     if (selMode) {
       colR.appendChild(addBlock((kind) => {
         if (kind === addKind) return;
-        addKind = kind; embedKey = `${addKind}|${selectedHours().join(',')}`; mountEmbed(false); draw();
+        addKind = kind; embedKey = selKey(); mountEmbed(false); draw();
       }, addKind));
-      const key = `${addKind}|${selectedHours().join(',')}`;
+      const key = selKey();
       if (key !== embedKey) { const same = embedKey.split('|')[0] === addKind; embedKey = key; mountEmbed(same); }
       colR.appendChild(embedHost);
       return;
@@ -236,6 +255,44 @@ export async function renderDay(day, query = {}) {
     g.addEventListener('pointercancel', end);
   }
 
+  // ---- циферблат
+  function dialMarks() {
+    const out = [];
+    const colors = { food: '#73D383', counter: '#DEDEDE', thought: '#F2D96B', task: '#B8B8B8' };
+    for (let hr = 0; hr < 24; hr++) {
+      const o = overlays(hm[hr], hr);
+      for (const f of activeFilters()) if (o[f]) out.push({ hour: hr, color: colors[f] || '#fff' });
+    }
+    // точки одного часа раздвигаем, чтобы не слипались
+    const seen = {};
+    return out.map((m) => { const n = seen[m.hour] || 0; seen[m.hour] = n + 1; return { ...m, hour: m.hour + n * 0.18 - 0.0 }; });
+  }
+  function buildDial() {
+    const filled = quarterOwners(evs).filter(Boolean).length / 4;
+    const d = createDial({
+      events: evs, sel: dsel, nowMin: isToday ? new Date().getHours() * 60 + new Date().getMinutes() : null,
+      marks: dialMarks(), hasRecords: filled > 0, filledHours: filled,
+      onPreview: (tmp) => { if (tmp.phase === 'none') { selMode = false; drawHeader(); return; } const t = hdrHost.querySelector('.sel-time'); if (t) t.textContent = selLabel(tmp); if (!selMode) { selMode = true; drawHeader(); const t2 = hdrHost.querySelector('.sel-time'); if (t2) t2.textContent = selLabel(tmp); } },
+      onCommit: (kind, seg) => {
+        selMode = true;
+        if (kind === 'start') dsel = { phase: 'start', a: seg };
+        else dsel = { phase: 'range', a: dsel.a, b: seg };
+        draw();
+      },
+      onOutside: () => { if (selMode) exitSel(); },
+    });
+    d.el.classList.toggle('sel', dsel.phase !== 'none');
+    return d.el;
+  }
+  // нажатие в пустое место экрана (мимо кольца и элементов интерфейса) отменяет выбор
+  if (dial) {
+    page.addEventListener('pointerdown', (e) => {
+      if (!selMode) return;
+      const t = e.target;
+      if (t === page || (t.classList && (t.classList.contains('cal-cols') || t.classList.contains('cal-l') || t.classList.contains('cal-r') || t.classList.contains('dial-wrap')))) exitSel();
+    });
+  }
+
   function overlays(slot, hr) {
     const out = {};
     const foods = slot.all.filter((e) => e.kind === 'food');
@@ -279,17 +336,15 @@ export async function renderDay(day, query = {}) {
   function drawActivities() {
     const box = h('<div class="summary"></div>');
     const list = evs.filter((e) => e.kind === 'activity' && (e.text || '').trim())
-      .sort((a, b) => (a.hours[0] - b.hours[0]) || (a.position - b.position));
-    for (const e of list) box.appendChild(sumLine(hoursLabel(e.hours), (e.text || '').trim(), { files: (e.files || []).length, prefix: prefixFor(e), onClick: () => openEvent(e) }));
+      .sort((a, b) => (eventSegments(a)[0][0] - eventSegments(b)[0][0]) || (a.position - b.position));
+    for (const e of list) box.appendChild(sumLine(eventTimeLabel(e), (e.text || '').trim(), { files: (e.files || []).length, prefix: prefixFor(e), onClick: () => openEvent(e) }));
     if (!list.length) box.appendChild(h('<p class="p">комментариев к часам пока нет</p>'));
     colR.appendChild(box);
   }
 
   // диаграмма дня: сколько часов на какое занятие
   function drawChart() {
-    const counts = new Map();
-    for (let hr = 0; hr < 24; hr++) { const k = hourKey(hm[hr]); counts.set(k, (counts.get(k) || 0) + 1); }
-    colR.appendChild(hourChart(counts, 24, true));
+    colR.appendChild(hourChart(dayHourCounts(evs), 24, true));
   }
 
   function drawFood() {
@@ -299,8 +354,8 @@ export async function renderDay(day, query = {}) {
       colR.appendChild(h(`<div class="sum-head"><span><b>${k.kcal}</b> ккал</span><span class="muted">${diff >= 0 ? '+' : ''}${diff} к норме</span></div><div class="progress"><i style="width:${Math.min(100, Math.round(k.kcal / norm * 100))}%;background:${foodHeat(k.kcal)}"></i></div><p class="p">белки ${k.protein} · жиры ${k.fat} · углеводы ${k.carbs}</p>`));
     }
     const box = h('<div class="summary"></div>');
-    const list = evs.filter((e) => e.kind === 'food').sort((a, b) => a.hours[0] - b.hours[0]);
-    for (const e of list) box.appendChild(sumLine(hoursLabel(e.hours), labelFor(e), { files: (e.files || []).length, onClick: () => openEvent(e) }));
+    const list = evs.filter((e) => e.kind === 'food').sort((a, b) => eventSegments(a)[0][0] - eventSegments(b)[0][0]);
+    for (const e of list) box.appendChild(sumLine(eventTimeLabel(e), labelFor(e), { files: (e.files || []).length, onClick: () => openEvent(e) }));
     if (!list.length) box.appendChild(h('<p class="p">еды в этот день не записано</p>'));
     colR.appendChild(box);
   }
@@ -319,8 +374,8 @@ export async function renderDay(day, query = {}) {
 
   function drawThoughts() {
     const box = h('<div class="summary"></div>');
-    const list = evs.filter((e) => e.kind === 'thought').sort((a, b) => a.hours[0] - b.hours[0]);
-    for (const e of list) box.appendChild(sumLine(hoursLabel(e.hours), e.text || '', { prefix: prefixFor(e), onClick: () => openEvent(e) }));
+    const list = evs.filter((e) => e.kind === 'thought').sort((a, b) => eventSegments(a)[0][0] - eventSegments(b)[0][0]);
+    for (const e of list) box.appendChild(sumLine(eventTimeLabel(e), e.text || '', { prefix: prefixFor(e), onClick: () => openEvent(e) }));
     if (!list.length) box.appendChild(h('<p class="p">мыслей в этот день нет</p>'));
     colR.appendChild(box);
   }

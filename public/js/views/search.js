@@ -1,7 +1,7 @@
 // Поиск по событиям, заметкам, датам и занятиям.
 import { I, KIND_ICON } from '../icons.js';
 import { get } from '../api.js';
-import { esc, humanDate, hoursLabel, activity, MOOD_COLOR } from '../state.js';
+import { esc, humanDate, eventTimeLabel, activity, MOOD_COLOR } from '../state.js';
 import { h, header } from '../ui.js';
 
 export async function renderSearch(q = {}) {
@@ -35,7 +35,7 @@ export async function renderSearch(q = {}) {
       results.appendChild(h(`<h3>события · ${r.events.length}</h3>`));
       for (const e of r.events) {
         const a = e.activity_id ? activity(e.activity_id) : null;
-        const when = e.kind === 'task' ? `задача · ${humanDate(e.day)}` : `${humanDate(e.day)} · ${hoursLabel(e.hours || [])}`;
+        const when = e.kind === 'task' ? `задача · ${humanDate(e.day)}` : `${humanDate(e.day)} · ${eventTimeLabel(e)}`;
         const dot = a ? `<i class="mood-dot" style="background:${a.color}"></i>` : e.kind === 'thought' ? `<i class="mood-dot" style="background:${MOOD_COLOR[e.mood || 'neutral']}"></i>` : `<span class="ico" style="display:inline-block;width:1.6rem;height:1.6rem;vertical-align:middle;margin-right:.6rem">${I[KIND_ICON[e.kind]]}</span>`;
         const el = h(`<button class="res"><span class="k">${when}</span><div>${dot}${mark(e.text || (a ? a.name : ''))}</div></button>`);
         el.onclick = () => { location.hash = e.kind === 'task' ? `#/add?days=${e.days.join(',')}&kind=task&edit=${e.id}` : `#/add?day=${e.day}&hours=${(e.hours || []).join(',')}&edit=${e.id}`; };

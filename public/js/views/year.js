@@ -2,7 +2,7 @@
 import { I } from '../icons.js';
 import {
   state, todayStr, loadYear, loadDates, eventsOfDay, hourMap, isSleepEvent, activity, tag, counter,
-  MONTHS_FULL, MONTHS_GEN, daysInMonth, esc, grad, plannedBg, activityLabel, hoursLabel, MOOD_COLOR,
+  MONTHS_FULL, MONTHS_GEN, daysInMonth, esc, grad, plannedBg, activityLabel, eventTimeLabel, dayHourCounts, fmtHours, MOOD_COLOR,
 } from '../state.js';
 import { h } from '../ui.js';
 import { calHeader, addBlock, selHeader, sumLine, hourChart } from './common.js';
@@ -76,11 +76,11 @@ export async function renderYear(yearStr, query = {}) {
           if (act && isSleepEvent(act)) { cell.classList.add('sleep'); key = act.activity_id; }
           else if (act) { const a = activity(act.activity_id); if (a) { cell.style.background = act.planned ? plannedBg(a.color, 2) : a.color; key = a.id; } }
         }
-        bump(key);
-        if (key !== 'empty') dayCnt.set(key, (dayCnt.get(key) || 0) + 1);
         g.appendChild(cell);
         // метка дня в начале строки
       }
+      // часы по занятиям с точностью до 15 минут
+      for (const [k, n2] of dayHourCounts(evs)) { counts.set(k, (counts.get(k) || 0) + n2); if (k !== 'empty') dayCnt.set(k, n2); }
       if (dayCnt.size) filledDays++;
       for (const [k, n2] of dayCnt) { const st = stat.get(k) || { hours: 0, days: 0 }; st.hours += n2; st.days++; stat.set(k, st); }
     }
@@ -197,7 +197,7 @@ export async function renderYear(yearStr, query = {}) {
       const box = h('<div class="summary"></div>');
       for (const e of list) {
         const text = labelFor(e) || '(без текста)';
-        box.appendChild(sumLine(hoursLabel(e.hours), text, {
+        box.appendChild(sumLine(eventTimeLabel(e), text, {
           files: (e.files || []).length, prefix: prefixFor(e),
           onClick: () => { location.hash = `#/add?day=${e.day}&hours=${(e.hours || []).join(',')}&edit=${e.id}&back=${back}`; },
         }));

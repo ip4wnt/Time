@@ -165,12 +165,51 @@ export function hourMap(dayEvents) {
   return hours.map((list) => { list.sort(byOrder); return { all: list, main: list[0] || null, extras: list.slice(1) }; });
 }
 
+// ---------- минуты и циферблат ----------
+// Интервалы события в минутах от 0:00: точный диапазон с циферблата или целые часы (подряд идущие часы — один интервал)
+export function eventSegments(e) {
+  if (Array.isArray(e.span_min) && e.span_min.length === 2) return [[e.span_min[0], e.span_min[1]]];
+  const hs = [...(e.hours || [])].sort((a, b) => a - b);
+  const out = [];
+  for (let i = 0; i < hs.length;) { let j = i; while (j + 1 < hs.length && hs[j + 1] === hs[j] + 1) j++; out.push([hs[i] * 60, (hs[j] + 1) * 60]); i = j + 1; }
+  return out;
+}
+export function overlapsSpan(e, s, f) { return eventSegments(e).some(([a, b]) => a < f && b > s); }
+export function spanHours(s, f) { const out = []; for (let h = Math.floor(s / 60); h <= Math.ceil(f / 60) - 1; h++) out.push(h); return out; }
+export const clock = (m) => `${Math.floor(m / 60)}:${pad(m % 60)}`;
+export function spanLabel(s, f) { return `${clock(s)}\u2013${f === 1440 ? '24:00' : clock(f)}`; }
+// подпись времени записи: «6:45–7:15» для записей циферблата, иначе «19-21»
+export function eventTimeLabel(e) {
+  if (Array.isArray(e.span_min) && e.span_min.length === 2) return spanLabel(e.span_min[0], e.span_min[1]);
+  return hoursLabel(e.hours || []);
+}
+// владелец каждой четверти часа (96 штук): первое по порядку занятие, покрывающее четверть
+export function quarterOwners(dayEvents) {
+  const owners = new Array(96).fill(null);
+  const acts = dayEvents.filter((e) => e.kind === 'activity').sort(byOrder);
+  for (const e of acts) for (const [a, b] of eventSegments(e)) for (let q = Math.floor(a / 15); q < Math.ceil(b / 15); q++) if (q >= 0 && q < 96 && !owners[q]) owners[q] = e;
+  return owners;
+}
+// ключ занятия для статистики: id занятия или 'empty'
+export function activityKey(e) {
+  if (!e) return 'empty';
+  if (isSleepEvent(e)) return e.activity_id;
+  const a = activity(e.activity_id);
+  return a ? a.id : 'empty';
+}
+// часы по занятиям за день с точностью до 15 минут: Map(ключ → часы, например 3.5)
+export function dayHourCounts(dayEvents, into = new Map()) {
+  for (const o of quarterOwners(dayEvents)) { const k = activityKey(o); into.set(k, (into.get(k) || 0) + 0.25); }
+  return into;
+}
+// «3,5» / «8» — часы с минутами для статистики
+export function fmtHours(n) { const v = Math.round(n * 100) / 100; return String(v).replace('.', ','); }
+export function dayViewMode() { return (state.user && state.user.settings && state.user.settings.day_view) === 'dial' ? 'dial' : 'grid'; }
+
 // доминирующее занятие дня (без сна): по числу часов, где занятие — основное
 export function dominantActivity(dayEvents) {
-  const hm = hourMap(dayEvents);
   const cnt = new Map();
-  for (const h of hm) {
-    const e = h.all.find((x) => x.kind === 'activity');
+  for (const e of quarterOwners(dayEvents)) {
     if (!e || isSleepEvent(e) || !e.activity_id) continue;
     cnt.set(e.activity_id, (cnt.get(e.activity_id) || 0) + 1);
   }
