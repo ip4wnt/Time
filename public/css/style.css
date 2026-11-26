@@ -606,8 +606,11 @@ body.bg-year { overflow: hidden; }
 
 /* ---------- циферблат дня ---------- */
 .dial-wrap { display: flex; justify-content: center; align-items: center; padding: 1.2rem 0 1.6rem; user-select: none; -webkit-user-select: none; }
-.dial { width: min(100%, 52rem); height: auto; display: block; touch-action: none; -webkit-tap-highlight-color: transparent; cursor: pointer; }
+.dial { width: min(100%, 60rem); height: auto; display: block; touch-action: none; -webkit-tap-highlight-color: transparent; cursor: pointer; }
 .dial text { font-family: inherit; pointer-events: none; }
 .dial-center text, .dial-frame, .dial-ticks, .dial-arcs { pointer-events: none; }
 .cell.partial { border-color: transparent; }
 .cell.partial.selected { border-color: var(--num); }
+/* циферблат: синий фон режима выбора времени, как в макете */
+body.bg-hours.dial-sel::before { background: linear-gradient(180deg, #20307D 0%, #000000 100%); opacity: .9; }
+.add-hint { margin: .4rem 0 1rem; text-align: center; color: rgba(255,255,255,.55); font-size: 1.8rem; }

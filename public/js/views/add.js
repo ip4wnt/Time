@@ -56,7 +56,7 @@ export async function renderAdd(q, opts = {}) {
   let focusNew = false;
   if (!entries.length || (!editId && kind !== 'activity' && kind !== 'task')) { entries.push(blank(kind)); focusNew = entries.length > 1; }
   // выбрано «занятие» для часов, где пока только счетчик, еда или мысль: даем заполнить занятие первым блоком
-  else if (!editId && kind === 'activity') entries.unshift(blank('activity')); // новый выбор времени всегда начинается с новой записи; прежние записи этих часов остаются ниже
+  else if (!editId && kind === 'activity' && !(q.existing && span)) entries.unshift(blank('activity')); // новый выбор времени всегда начинается с новой записи; прежние записи этих часов остаются ниже
 
   function blank(k) {
     return { id: null, kind: k, day, hours: [...selHours], span_min: k !== 'task' && span ? [...span] : null, days: [...selDays], activity_id: null, tag_id: null, text: '', mood: 'neutral', kcal: null, protein: null, fat: null, carbs: null, food_calc: null, counter_id: state.counters[0]?.id || null, counter_value: null, done: false, planned: false, files: [], pending: [] };
@@ -71,6 +71,8 @@ export async function renderAdd(q, opts = {}) {
   const page = h(`<div class="${embed ? 'add-embed' : 'page'}"></div>`);
   app.appendChild(page);
   const list = h('<div></div>');
+  // циферблат: начало выбрано, конец ещё нет
+  if (q.start && !q.existing && embed) page.appendChild(h('<p class="add-hint">выберите конец диапазона</p>'));
   page.appendChild(list);
   const foot = h(`<div class="add-foot"><button data-act="cancel">Отменить</button><button data-act="save">Сохранить</button></div>`);
   page.appendChild(foot);

@@ -1,16 +1,16 @@
-// Циферблат дня: 24 часа по кругу, ноль часов вверху, шаг выбора 15 минут (96 сегментов).
-// Длинные риски — часы, короткие — четверти. Компонент рисует кольцо и принимает жесты;
+// Циферблат дня по макету «выбор часов»: широкое кольцо из 24 часов (ноль вверху), внутри риски и подписи часов.
+// Шаг выбора — 15 минут (96 сегментов). Компонент рисует кольцо и принимает жесты;
 // состоянием выбора (начало, конец, форма внизу) управляет представление дня.
-import { quarterOwners, activity, isSleepEvent, clock, spanLabel, fmtHours } from '../state.js';
+import { quarterOwners, activity, isSleepEvent, darken, dotClock, spanLabel } from '../state.js';
 
 const NS = 'http://www.w3.org/2000/svg';
-const CX = 50; const CY = 50;
-const R_IN = 30; const R_OUT = 44;       // кольцо с занятиями
-const SEG = 3.75;                         // градусов на 15 минут
+// координаты макета: центр в нуле, внешний радиус 283.85, внутренний 187.7
+const R_OUT = 283.85; const R_IN = 187.7;
+const SEG = 3.75; // градусов на 15 минут
+const VB = 292;
 
-const pt = (r, deg) => { const a = (deg - 90) * Math.PI / 180; return [CX + r * Math.cos(a), CY + r * Math.sin(a)]; };
+const pt = (r, deg) => { const a = (deg - 90) * Math.PI / 180; return [r * Math.cos(a), r * Math.sin(a)]; };
 const f2 = (n) => Math.round(n * 100) / 100;
-// сектор кольца от угла d0 до d1 (по часовой, от верха)
 function sector(d0, d1, ri = R_IN, ro = R_OUT) {
   const [x0, y0] = pt(ro, d0); const [x1, y1] = pt(ro, d1);
   const [x2, y2] = pt(ri, d1); const [x3, y3] = pt(ri, d0);
@@ -24,10 +24,10 @@ const el = (tag, attrs = {}, parent) => {
   return n;
 };
 
-// Метка выбора для шапки: «6:45» пока выбираем начало, «6:45–7:15» — диапазон
+// Метка выбора для шапки: «6.45» пока выбираем начало, «6.45-7.15» — диапазон
 export function selLabel(sel) {
   if (!sel || sel.phase === 'none') return '';
-  if (sel.phase === 'start' || sel.phase === 'picking-start') return clock(sel.a * 15);
+  if (sel.phase === 'start' || sel.phase === 'picking-start') return dotClock(sel.a * 15);
   const lo = Math.min(sel.a, sel.b); const hi = Math.max(sel.a, sel.b);
   return spanLabel(lo * 15, (hi + 1) * 15);
 }
@@ -39,23 +39,42 @@ export function selSpan(sel) {
   return [lo * 15, (hi + 1) * 15];
 }
 
-// opts: { events, sel, nowMin, marks:[{hour,color}], hasRecords, onPreview(sel), onCommit(kind, seg), onOutside() }
+// opts: { events, sel, nowMin, marks:[{hour,color}], onPreview(sel), onCommit(kind, seg), onOutside() }
 export function createDial(opts) {
   const wrap = document.createElement('div');
   wrap.className = 'dial-wrap';
-  const svg = el('svg', { viewBox: '0 0 100 100', class: 'dial', role: 'img', 'aria-label': 'циферблат дня' });
+  const svg = el('svg', { viewBox: `${-VB} ${-VB} ${VB * 2} ${VB * 2}`, class: 'dial', role: 'img', 'aria-label': 'циферблат дня' });
   wrap.appendChild(svg);
 
   const defs = el('defs', {}, svg);
-  const bg = el('radialGradient', { id: 'dialBg', cx: '50%', cy: '50%', r: '50%' }, defs);
-  el('stop', { offset: '0%', 'stop-color': '#2b2b2b', 'stop-opacity': '.55' }, bg);
-  el('stop', { offset: '70%', 'stop-color': '#151115', 'stop-opacity': '.9' }, bg);
-  el('stop', { offset: '100%', 'stop-color': '#000', 'stop-opacity': '.95' }, bg);
-  el('circle', { cx: CX, cy: CY, r: 49.2, fill: 'url(#dialBg)' }, svg);
+  // внутренняя тень основы кольца, как в макете
+  const flt = el('filter', { id: 'dialShadow', x: -VB, y: -VB, width: VB * 2, height: VB * 2, filterUnits: 'userSpaceOnUse', 'color-interpolation-filters': 'sRGB' }, defs);
+  el('feFlood', { 'flood-opacity': 0, result: 'bg' }, flt);
+  el('feBlend', { in: 'SourceGraphic', in2: 'bg', result: 'shape' }, flt);
+  el('feColorMatrix', { in: 'SourceAlpha', type: 'matrix', values: '0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0', result: 'hard' }, flt);
+  el('feGaussianBlur', { stdDeviation: 12 }, flt);
+  el('feComposite', { in2: 'hard', operator: 'arithmetic', k2: -1, k3: 1 }, flt);
+  el('feColorMatrix', { type: 'matrix', values: '0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0' }, flt);
+  el('feBlend', { in2: 'shape' }, flt);
 
-  // фон кольца
-  const track = el('g', { class: 'dial-track' }, svg);
-  el('circle', { cx: CX, cy: CY, r: (R_IN + R_OUT) / 2, fill: 'none', stroke: '#1c181c', 'stroke-width': R_OUT - R_IN }, track);
+  // основа кольца: затемнение 40% с внутренней тенью
+  const base = el('path', {
+    d: `M${R_OUT} 0A${R_OUT} ${R_OUT} 0 1 1 ${-R_OUT} 0A${R_OUT} ${R_OUT} 0 1 1 ${R_OUT} 0ZM${R_IN} 0A${R_IN} ${R_IN} 0 1 0 ${-R_IN} 0A${R_IN} ${R_IN} 0 1 0 ${R_IN} 0Z`,
+    fill: '#000', 'fill-opacity': .4, 'fill-rule': 'evenodd', filter: 'url(#dialShadow)',
+  }, svg);
+  base.setAttribute('class', 'dial-base');
+
+  // градиенты занятий идут по диагонали всего кольца: цвет снизу слева, темнее сверху справа
+  const grads = new Map();
+  const gradFor = (hex) => {
+    if (grads.has(hex)) return grads.get(hex);
+    const id = `dg${grads.size}`;
+    const g = el('linearGradient', { id, gradientUnits: 'userSpaceOnUse', x1: -R_OUT, y1: R_OUT, x2: R_OUT, y2: -R_OUT }, defs);
+    el('stop', { 'stop-color': hex }, g);
+    el('stop', { offset: 1, 'stop-color': darken(hex) }, g);
+    grads.set(hex, `url(#${id})`);
+    return grads.get(hex);
+  };
 
   // занятия: подряд идущие четверти одной записи сливаются в дугу
   const arcs = el('g', { class: 'dial-arcs' }, svg);
@@ -66,79 +85,67 @@ export function createDial(opts) {
     let j = q; while (j + 1 < 96 && owners[j + 1] === o) j++;
     const a = o.activity_id ? activity(o.activity_id) : null;
     const sleep = isSleepEvent(o);
-    const color = sleep ? '#3a363a' : (a ? a.color : '#686868');
-    const p = el('path', { d: sector(q * SEG + .12, (j + 1) * SEG - .12), fill: color, 'fill-opacity': o.planned ? .4 : 1 }, arcs);
-    if (o.planned) { p.setAttribute('stroke', color); p.setAttribute('stroke-width', '.35'); p.setAttribute('stroke-dasharray', '1.2 .8'); }
+    const d = sector(q * SEG, (j + 1) * SEG);
+    if (sleep) el('path', { d, fill: '#272727', 'fill-opacity': .5, stroke: '#1B296B', 'stroke-width': 4, 'stroke-linejoin': 'round' }, arcs);
+    else {
+      const color = a ? a.color : '#686868';
+      const p = el('path', { d, fill: gradFor(color), stroke: '#1B296B', 'stroke-width': 4, 'stroke-linejoin': 'round' }, arcs);
+      if (o.planned) p.setAttribute('fill-opacity', .45);
+    }
     q = j + 1;
   }
 
-  // риски: длинные — часы, короткие — четверти (снаружи кольца)
-  const ticks = el('g', { class: 'dial-ticks', stroke: '#fff', 'stroke-linecap': 'round' }, svg);
+  // риски внутри кольца: длинные — часы, короткие — четверти; подписи чётных часов
+  const ticks = el('g', { class: 'dial-ticks', 'stroke-linecap': 'butt' }, svg);
   for (let q = 0; q < 96; q++) {
     const hourTick = q % 4 === 0;
-    const [x0, y0] = pt(R_OUT + .9, q * SEG); const [x1, y1] = pt(R_OUT + (hourTick ? 4.2 : 2.2), q * SEG);
-    el('line', { x1: f2(x0), y1: f2(y0), x2: f2(x1), y2: f2(y1), 'stroke-width': hourTick ? .55 : .3, 'stroke-opacity': hourTick ? .85 : .45 }, ticks);
+    const [x0, y0] = pt(180.3, q * SEG); const [x1, y1] = pt(hourTick ? 169.2 : 174.7, q * SEG);
+    el('line', { x1: f2(x0), y1: f2(y0), x2: f2(x1), y2: f2(y1), stroke: hourTick ? '#777EA8' : '#4F588E', 'stroke-width': 2 }, ticks);
   }
-  // подписи часов внутри кольца
-  for (let hr = 0; hr < 24; hr++) {
-    const [x, y] = pt(R_IN - 3.6, hr * 15 + 7.5 - 7.5);
-    const t = el('text', { x: f2(x), y: f2(y + 1.1), 'text-anchor': 'middle', 'font-size': hr % 3 === 0 ? 3.4 : 2.6, fill: '#fff', 'fill-opacity': hr % 3 === 0 ? .75 : .35 }, svg);
+  for (let hr = 0; hr < 24; hr += 2) {
+    const major = hr % 6 === 0;
+    const [x, y] = pt(148, hr * 15);
+    const t = el('text', { x: f2(x), y: f2(y + (major ? 8.5 : 5.5)), 'text-anchor': 'middle', 'font-size': major ? 25 : 15.5, fill: major ? '#DEDEDE' : '#919191' }, svg);
     t.textContent = hr;
   }
-  // отметки наложений (еда, мысли, счётчик, задачи): точки под подписью часа
+  // отметки наложений (еда, мысли, счётчик, задачи) — точки на кольце
   for (const m of opts.marks || []) {
-    const [x, y] = pt(R_IN - 7.4, m.hour * 15);
-    el('circle', { cx: f2(x), cy: f2(y), r: .9, fill: m.color }, svg);
+    const [x, y] = pt(R_OUT - 12, m.hour * 15 + 1.5);
+    el('circle', { cx: f2(x), cy: f2(y), r: 4.5, fill: m.color, stroke: '#000', 'stroke-opacity': .5, 'stroke-width': 1 }, svg);
   }
   // текущее время
   if (opts.nowMin != null) {
-    const [x, y] = pt(R_OUT + 6.6, opts.nowMin * .25);
-    el('circle', { cx: f2(x), cy: f2(y), r: 1.1, fill: '#81FF96' }, svg);
+    const [x, y] = pt(R_IN - 14, opts.nowMin * .25);
+    el('circle', { cx: f2(x), cy: f2(y), r: 5, fill: '#81FF96' }, svg);
   }
 
-  // рамка выбора и подпись в центре
+  // белая рамка выбора
   const frame = el('g', { class: 'dial-frame' }, svg);
-  const center = el('g', { class: 'dial-center' }, svg);
-  const cMain = el('text', { x: CX, y: CY + 1.8, 'text-anchor': 'middle', 'font-size': 7, fill: '#fff' }, center);
-  const cSub = el('text', { x: CX, y: CY + 8, 'text-anchor': 'middle', 'font-size': 2.8, fill: '#fff', 'fill-opacity': .5 }, center);
-
-  function paintCenter(sel) {
-    if (sel && sel.phase !== 'none') { cMain.textContent = selLabel(sel); cSub.textContent = ''; return; }
-    cMain.textContent = opts.hasRecords ? fmtHours(opts.filledHours || 0) : '';
-    cSub.textContent = opts.hasRecords ? 'ч записано' : 'нажмите на кольцо';
-  }
   function paintFrame(sel) {
     frame.replaceChildren();
-    if (sel && sel.phase !== 'none') {
-      if (sel.phase === 'start' || sel.phase === 'picking-start') {
-        // белая отсечка начала диапазона: рамка вокруг четверти и длинная линия от центра кольца
-        el('path', { d: sector(sel.a * SEG, (sel.a + 1) * SEG), fill: 'none', stroke: '#fff', 'stroke-width': .7, 'stroke-linejoin': 'round' }, frame);
-        const [x0, y0] = pt(R_IN - 1.5, sel.a * SEG); const [x1, y1] = pt(R_OUT + 4.6, sel.a * SEG);
-        el('line', { x1: f2(x0), y1: f2(y0), x2: f2(x1), y2: f2(y1), stroke: '#fff', 'stroke-width': .9, 'stroke-linecap': 'round' }, frame);
-      } else {
-        const lo = Math.min(sel.a, sel.b); const hi = Math.max(sel.a, sel.b);
-        el('path', { d: sector(lo * SEG, (hi + 1) * SEG), fill: 'rgba(255,255,255,.12)', stroke: '#fff', 'stroke-width': .8, 'stroke-linejoin': 'round' }, frame);
-      }
-    }
-    paintCenter(sel);
+    if (!sel || sel.phase === 'none') return;
+    let lo; let hi;
+    if (sel.phase === 'start' || sel.phase === 'picking-start') { lo = sel.a; hi = sel.a; } else { lo = Math.min(sel.a, sel.b); hi = Math.max(sel.a, sel.b); }
+    el('path', { d: sector(lo * SEG, (hi + 1) * SEG), fill: 'none', stroke: '#fff', 'stroke-width': 6, 'stroke-linejoin': 'miter' }, frame);
   }
   paintFrame(opts.sel);
 
   // ---- жесты
   const geom = (e) => {
     const r = svg.getBoundingClientRect();
-    const k = r.width / 100;
+    const k = r.width / (VB * 2);
     const dx = e.clientX - (r.left + r.width / 2); const dy = e.clientY - (r.top + r.height / 2);
     let deg = Math.atan2(dx, -dy) * 180 / Math.PI; if (deg < 0) deg += 360;
     return { dist: Math.hypot(dx, dy) / k, seg: Math.min(95, Math.floor(deg / SEG)) };
   };
   let gesture = null; // 'start' | 'end'
+  let lastSeg = -1;
   svg.style.touchAction = 'none';
   svg.addEventListener('pointerdown', (e) => {
     if (e.button !== undefined && e.button > 0) return;
     const g = geom(e);
-    // кольцо вместе с рисками; всё остальное — «мимо»
-    if (g.dist < R_IN - 1 || g.dist > R_OUT + 5) { opts.onOutside?.(); return; }
+    // кольцо; всё остальное — «мимо»
+    if (g.dist < R_IN - 4 || g.dist > R_OUT + 6) { opts.onOutside?.(); return; }
     gesture = opts.sel && opts.sel.phase === 'start' ? 'end' : 'start';
     try { svg.setPointerCapture(e.pointerId); } catch { /* ignore */ }
     apply(g.seg);
@@ -147,10 +154,9 @@ export function createDial(opts) {
   svg.addEventListener('pointermove', (e) => {
     if (!gesture) return;
     const g = geom(e);
-    if (g.dist < 6) return; // у самого центра угол нестабилен
+    if (g.dist < 40) return; // у самого центра угол нестабилен
     if (g.seg !== lastSeg) apply(g.seg);
   });
-  let lastSeg = -1;
   function apply(seg) {
     lastSeg = seg;
     const tmp = gesture === 'start' ? { phase: 'picking-start', a: seg } : { phase: 'picking-end', a: opts.sel.a, b: seg };
