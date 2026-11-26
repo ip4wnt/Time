@@ -90,6 +90,7 @@ export async function renderDay(day, query = {}) {
       ? `#/add?days=${day}&hours=${hrs}&kind=task&back=${back}`
       : `#/add?day=${day}&hours=${hrs}&kind=${kind}&back=${back}`;
   }
+  const ARROW_DIAL = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -4, ArrowDown: 4 };
   const ARROW = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -6, ArrowDown: 6 };
   function onKey(e) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -110,7 +111,22 @@ export async function renderDay(day, query = {}) {
       const lo = Math.min(kbAnchor, kbCursor); const hi = Math.max(kbAnchor, kbCursor);
       state.selection = new Set(Array.from({ length: hi - lo + 1 }, (_, i) => lo + i));
       selMode = true; draw();
-    } else if (e.key === 'Enter' && selMode && state.selection.size) {
+    } else if (dial && e.key in ARROW_DIAL) {
+      // циферблат: влево/вправо — на 15 минут, вверх/вниз — на час; Shift растягивает диапазон от точки старта
+      e.preventDefault();
+      if (kbCursor === null) {
+        if (dsel.phase === 'start') { kbCursor = dsel.a; kbAnchor = dsel.a; }
+        else if (dsel.phase === 'range') { kbCursor = Math.max(dsel.a, dsel.b); kbAnchor = Math.min(dsel.a, dsel.b); }
+        else { kbCursor = (isToday ? nowHour : 0) * 4; kbAnchor = kbCursor; selMode = true; dsel = { phase: 'start', a: kbCursor }; draw(); return; } // первое нажатие только показывает начало
+      }
+      const next = Math.max(0, Math.min(95, kbCursor + ARROW_DIAL[e.key]));
+      if (next === kbCursor) return;
+      kbCursor = next;
+      if (!e.shiftKey) kbAnchor = next;
+      selMode = true;
+      dsel = kbAnchor === kbCursor ? { phase: 'start', a: kbCursor } : { phase: 'range', a: kbAnchor, b: kbCursor };
+      draw();
+    } else if (e.key === 'Enter' && selMode && (dial ? dsel.phase !== 'none' : state.selection.size)) {
       e.preventDefault(); e.stopImmediatePropagation(); embedCleanup?.engage?.();
     } else if (e.key === 'Escape' && selMode) {
       e.preventDefault(); exitSel();
@@ -274,7 +290,7 @@ export async function renderDay(day, query = {}) {
       marks: dialMarks(), hasRecords: filled > 0, filledHours: filled,
       onPreview: (tmp) => { if (tmp.phase === 'none') { selMode = false; drawHeader(); return; } const t = hdrHost.querySelector('.sel-time'); if (t) t.textContent = selLabel(tmp); if (!selMode) { selMode = true; drawHeader(); const t2 = hdrHost.querySelector('.sel-time'); if (t2) t2.textContent = selLabel(tmp); } },
       onCommit: (kind, seg) => {
-        selMode = true;
+        selMode = true; kbCursor = null; kbAnchor = null;
         if (kind === 'start') dsel = { phase: 'start', a: seg };
         else dsel = { phase: 'range', a: dsel.a, b: seg };
         draw();
