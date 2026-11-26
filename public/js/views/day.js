@@ -294,10 +294,9 @@ export async function renderDay(day, query = {}) {
       events: evs, sel: dsel, nowMin: isToday ? new Date().getHours() * 60 + new Date().getMinutes() : null,
       marks: dialMarks(),
       onPreview: (tmp) => { if (tmp.phase === 'none') { selMode = false; drawHeader(); return; } const t = hdrHost.querySelector('.sel-time'); if (t) t.textContent = selLabel(tmp); if (!selMode) { selMode = true; drawHeader(); const t2 = hdrHost.querySelector('.sel-time'); if (t2) t2.textContent = selLabel(tmp); } },
-      onCommit: (kind, seg) => {
+      onCommit: (kind, sel) => {
         selMode = true; kbCursor = null; kbAnchor = null;
-        if (kind === 'start') dsel = { phase: 'start', a: seg };
-        else dsel = { phase: 'range', a: dsel.a, b: seg };
+        dsel = sel; // короткое нажатие даёт целый час, ведение пальцем — шаг 15 минут
         draw();
       },
       onOutside: () => { if (selMode) exitSel(); },
