@@ -36,7 +36,7 @@ async function tx(fn) {
 // ===== Изоляция данных пользователей =====
 // Таблицы ниже закрыты политиками RLS (sql/schema.sql): строка видна только тому,
 // чей id выставлен в chronum.user_id, либо служебной транзакции (chronum.admin='on').
-const PROTECTED_TABLES = ['activities', 'tags', 'counters', 'events', 'important_dates', 'notes', 'files', 'period_notes'];
+const PROTECTED_TABLES = ['activities', 'tags', 'counters', 'events', 'important_dates', 'notes', 'files', 'period_notes', 'fin_budgets', 'fin_nodes', 'fin_tx'];
 const TOUCHES_PROTECTED = new RegExp(`\\b(?:FROM|JOIN|INTO|UPDATE)\\s+(?:${PROTECTED_TABLES.join('|')})\\b`, 'i');
 
 // Второй рубеж: запрос к защищённой таблице обязан сам фильтровать по user_id.

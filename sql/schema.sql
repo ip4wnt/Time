@@ -230,3 +230,77 @@ ALTER TABLE events ADD COLUMN IF NOT EXISTS planned BOOLEAN NOT NULL DEFAULT fal
 -- NULL — запись по целым часам (как раньше). hours всегда заполнен и содержит все затронутые часы,
 -- поэтому месяц, год, поиск и старые клиенты работают без изменений.
 ALTER TABLE events ADD COLUMN IF NOT EXISTS span_min SMALLINT[];
+
+-- ===== Финансы: бюджеты (годовые и отдельные), дерево статей, фактические операции =====
+-- Бюджет года создаётся при первом открытии; отдельный бюджет (проект, задача) заводит и удаляет сам пользователь.
+CREATE TABLE IF NOT EXISTS fin_budgets (
+  id         BIGSERIAL PRIMARY KEY,
+  user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind       TEXT NOT NULL CHECK (kind IN ('year','custom')),
+  year       INT,
+  name       TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS fin_budgets_year_uq ON fin_budgets(user_id, year) WHERE kind = 'year';
+CREATE INDEX IF NOT EXISTS fin_budgets_user_idx ON fin_budgets(user_id, kind, year);
+
+-- Узлы: раздел (section) → подраздел (divider, title может быть пустым — просто черта) → статья (item).
+-- parent_id NULL — корень части (side: expense | income). Порядок — по position среди соседей.
+CREATE TABLE IF NOT EXISTS fin_nodes (
+  id         BIGSERIAL PRIMARY KEY,
+  user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  budget_id  BIGINT NOT NULL REFERENCES fin_budgets(id) ON DELETE CASCADE,
+  side       TEXT NOT NULL CHECK (side IN ('expense','income')),
+  parent_id  BIGINT REFERENCES fin_nodes(id) ON DELETE CASCADE,
+  type       TEXT NOT NULL CHECK (type IN ('section','divider','item')),
+  title      TEXT NOT NULL DEFAULT '',
+  plan       NUMERIC(14,2) NOT NULL DEFAULT 0,   -- планируемая сумма статьи (целиком, вместе с уже исполненной)
+  position   INT NOT NULL DEFAULT 0,
+  collapsed  BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS fin_nodes_budget_idx ON fin_nodes(budget_id, side, parent_id, position);
+
+-- Исполнение плана: каждая запись — фактическая сумма по статье. event_id — если внесено из трекера.
+CREATE TABLE IF NOT EXISTS fin_tx (
+  id         BIGSERIAL PRIMARY KEY,
+  user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  budget_id  BIGINT NOT NULL REFERENCES fin_budgets(id) ON DELETE CASCADE,
+  node_id    BIGINT NOT NULL REFERENCES fin_nodes(id) ON DELETE CASCADE,
+  amount     NUMERIC(14,2) NOT NULL,
+  note       TEXT NOT NULL DEFAULT '',
+  day        DATE NOT NULL DEFAULT CURRENT_DATE,
+  event_id   BIGINT REFERENCES events(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS fin_tx_node_idx ON fin_tx(node_id, day);
+CREATE UNIQUE INDEX IF NOT EXISTS fin_tx_event_uq ON fin_tx(event_id) WHERE event_id IS NOT NULL;
+
+-- Деньги в трекере: запись вида money привязана к статье бюджета и отражается в ней как операция
+ALTER TABLE events ADD COLUMN IF NOT EXISTS money_node_id BIGINT REFERENCES fin_nodes(id) ON DELETE SET NULL;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS money_amount NUMERIC(14,2);
+DO $k$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'events_kind_check' AND pg_get_constraintdef(oid) LIKE '%money%') THEN
+    ALTER TABLE events DROP CONSTRAINT IF EXISTS events_kind_check;
+    ALTER TABLE events ADD CONSTRAINT events_kind_check CHECK (kind IN ('activity','task','food','thought','counter','money'));
+  END IF;
+END
+$k$;
+
+DO $rls$
+DECLARE
+  t     text;
+  cond  text := $c$(
+    user_id = nullif(current_setting('chronum.user_id', true), '')::bigint
+    OR current_setting('chronum.admin', true) = 'on'
+  )$c$;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['fin_budgets', 'fin_nodes', 'fin_tx'] LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+    EXECUTE format('DROP POLICY IF EXISTS %I ON %I', t || '_own', t);
+    EXECUTE format('CREATE POLICY %I ON %I USING %s WITH CHECK %s', t || '_own', t, cond, cond);
+  END LOOP;
+END
+$rls$;

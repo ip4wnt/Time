@@ -344,6 +344,7 @@ export async function renderDay(day, query = {}) {
   function labelFor(e) {
     if (e.kind === 'activity') { return activityLabel(e); }
     if (e.kind === 'counter') { const c = counter(e.counter_id); return `${c ? c.name : 'счётчик'}: ${e.counter_value}${c && c.unit ? ` ${c.unit}` : ''}`; }
+    if (e.kind === 'money') return `${e.money_amount != null ? Math.round(e.money_amount).toLocaleString('ru-RU') + ' ₽' : 'деньги'}${(e.text || '').trim() ? ` — ${(e.text || '').trim()}` : ''}`;
     if (e.kind === 'food') return (e.text || '').trim() + (e.kcal != null ? ` — ${Math.round(e.kcal)} ккал` : '');
     return (e.text || '').trim();
   }
